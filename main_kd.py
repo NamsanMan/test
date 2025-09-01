@@ -60,7 +60,7 @@ def main():
         raise FileNotFoundError(f"Checkpoint not found: {best_ckpt}")
     """
 
-    # 2) 베스트 체크포인트 로드(student)
+    # 2) test를 위해 베스트 체크포인트 로드(student) (모델 정보와 epoch 정보만 불러온다, 학습 재개를 위한다면 코드 수정필요)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = train_kd.student
     ckpt = torch.load(best_ckpt, map_location=device, weights_only=False)

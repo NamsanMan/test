@@ -128,6 +128,21 @@ def run_training(num_epochs):
     best_epoch  = 0
     best_ckpt   = config.GENERAL.BASE_DIR / "best_model.pth"
 
+    # CSV 로그 파일 경로 설정 및 헤더 생성
+    log_csv_path = config.GENERAL.LOG_DIR / "training_log.csv"
+    csv_headers = [
+        "Epoch", "Train Loss", "VAL Loss",
+        "Val mIoU", "Pixel Acc", "LR"
+    ]
+    # 클래스별 IoU 헤더 추가
+    for class_name in config.DATA.CLASS_NAMES:
+        csv_headers.append(f"IoU_{class_name}")
+
+    # 파일이 없으면 헤더를 포함하여 새로 생성
+    if not log_csv_path.exists():
+        df_log = pd.DataFrame(columns=csv_headers)
+        df_log.to_csv(log_csv_path, index=False)
+
     train_losses, val_losses = [], []
 
     for epoch in range(1, num_epochs+1):
@@ -151,11 +166,30 @@ def run_training(num_epochs):
               f"train_loss={tr_loss:.4f}, val_loss={vl_loss:.4f}, "
               f"val_mIoU={miou:.4f},  PA={pa:.4f}")
 
+        current_lr = optimizer.param_groups[0]['lr']
+        # CSV 파일에 성능 지표 기록
+        log_data = {
+            "Epoch": epoch,
+            "TRAIN Loss": tr_loss,
+            "VAL Loss": vl_loss,
+            "Val mIoU": miou,
+            "Pixel Acc": pa,
+            "LR": current_lr
+        }
+        # 클래스별 IoU를 log_data 딕셔너리에 추가
+        per_cls_iou = metrics["per_class_iou"]
+        for i, class_name in enumerate(config.DATA.CLASS_NAMES):
+            log_data[f"IoU_{class_name}"] = per_cls_iou[i]
+
+        # DataFrame으로 변환 후 CSV 파일에 append
+        df_new_row = pd.DataFrame([log_data])
+        df_new_row.to_csv(log_csv_path, mode='a', header=False, index=False)
+
         # best model 갱신
         if miou > best_miou:
             best_miou  = miou
             best_epoch = epoch
-
+            """
             # 1) per-class IoU 계산 및 CSV 저장
             per_cls_iou = metrics["per_class_iou"]
             df_iou = pd.DataFrame({
@@ -180,9 +214,12 @@ def run_training(num_epochs):
             cm_path = config.GENERAL.LOG_DIR / f"confusion_matrix_epoch_{epoch}.png"
             plt.savefig(str(cm_path), bbox_inches="tight")
             plt.close()
+            """
             torch.save({
                 "epoch": epoch,
                 "model_state": model.state_dict(),
+                "optimizer_state": optimizer.state_dict(),
+                "scheduler_state": scheduler.state_dict(),
                 "best_val_mIoU": best_miou
             }, best_ckpt)
             print(f"▶ New best val_mIoU at epoch {epoch}: {miou:.4f} → {best_ckpt}")

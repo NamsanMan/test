@@ -8,10 +8,10 @@ import numpy as np
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "TEMP"
+    PROJECT_NAME = "TEMP2"
 
     # 결과 파일을 저장할 기본 경로
-    BASE_DIR = Path('/content/result_files/test_results') / PROJECT_NAME
+    BASE_DIR = Path(r"E:\LAB\result_files\test_results") / PROJECT_NAME
     LOG_DIR = BASE_DIR / "log"
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -25,7 +25,7 @@ class GENERAL:
 # ──────────────────────────────────────────────────────────────────
 class DATA:
     # 데이터셋 경로
-    DATA_DIR   = Path('/content/drive/MyDrive/LAB/datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/A_set')  # data_loader에서 사용하던 경로
+    DATA_DIR   = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\B_set")  # data_loader에서 사용하던 경로
     TRAIN_DIR = DATA_DIR / "train"
     VAL_DIR = DATA_DIR / "val"
     TEST_DIR = DATA_DIR / "test"
@@ -75,7 +75,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'segformerb5'
+    NAME = 'segformerb0'
 
     """
     available models:

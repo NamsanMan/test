@@ -262,6 +262,8 @@ def run_training(num_epochs):
                 "epoch": epoch,
                 "model_state": student.state_dict(),
                 "teacher_state": teacher.state_dict(),
+                "optimizer_state": optimizer.state_dict(),
+                "scheduler_state": scheduler.state_dict(),
                 "best_val_mIoU": best_miou
             }, best_ckpt)
             print(f"▶ New best val_mIoU at epoch {epoch}: {miou:.4f} → {best_ckpt}")
