@@ -25,7 +25,7 @@ class GENERAL:
 # ──────────────────────────────────────────────────────────────────
 class DATA:
     # 데이터셋 경로
-    DATA_DIR   = Path('content/drive/MyDrive/LAB/datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/A_set')  # data_loader에서 사용하던 경로
+    DATA_DIR   = Path('/content/drive/MyDrive/LAB/datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/A_set')  # data_loader에서 사용하던 경로
     TRAIN_DIR = DATA_DIR / "train"
     VAL_DIR = DATA_DIR / "val"
     TEST_DIR = DATA_DIR / "test"
