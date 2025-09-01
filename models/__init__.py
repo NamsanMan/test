@@ -40,12 +40,12 @@ def create_model(model_name: str):
         print(f"  - Pretrained source: 'nvidia/mit-b3'")
 
     elif model_name == 'segformerb4':
-        model = SegFormerB3(num_classes=num_classes)
+        model = SegFormerB4(num_classes=num_classes)
         print(f"▶ Model 'SegFormer MiT-B4' created.")
         print(f"  - Pretrained source: 'nvidia/mit-b4'")
 
     elif model_name == 'segformerb5':
-        model = SegFormerB3(num_classes=num_classes)
+        model = SegFormerB5(num_classes=num_classes)
         print(f"▶ Model 'SegFormer MiT-B5' created.")
         print(f"  - Pretrained source: 'nvidia/mit-b5'")
 
