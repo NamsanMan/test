@@ -2,6 +2,27 @@ import torch
 from pathlib import Path
 import numpy as np
 
+# 'COLAB_GPU'는 Colab 환경에만 존재하는 환경 변수입니다.
+IS_COLAB = 'COLAB_GPU' in os.environ
+
+# 💡 2. 플래그 값에 따라 경로를 다르게 설정
+if IS_COLAB:
+    # --- Colab 환경일 때의 경로 ---
+    print("▶ Running in Google Colab environment.")
+
+    # Colab의 구글 드라이브 경로를 기본 경로로 설정
+    BASE_DRIVE_DIR = Path('/content/drive/MyDrive/LAB')
+
+    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/B_set"
+    BASE_DIR = BASE_DRIVE_DIR / "result_files/test_results"
+
+else:
+    # --- 로컬 환경일 때의 경로 ---
+    print("▶ Running in local environment.")
+
+    # 기존에 사용하시던 로컬 경로 설정
+    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\B_set")
+    BASE_DIR = Path(r"E:\LAB\result_files\test_results")
 
 # ──────────────────────────────────────────────────────────────────
 # 1. GENERAL: 프로젝트 전반 및 실험 관리 설정
@@ -11,7 +32,7 @@ class GENERAL:
     PROJECT_NAME = "TEMP2"
 
     # 결과 파일을 저장할 기본 경로
-    BASE_DIR = Path(r"E:\LAB\result_files\test_results") / PROJECT_NAME
+    BASE_DIR = BASE_DIR / PROJECT_NAME
     LOG_DIR = BASE_DIR / "log"
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -25,7 +46,7 @@ class GENERAL:
 # ──────────────────────────────────────────────────────────────────
 class DATA:
     # 데이터셋 경로
-    DATA_DIR   = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\B_set")  # data_loader에서 사용하던 경로
+    DATA_DIR   = DATA_DIR  # data_loader에서 사용하던 경로
     TRAIN_DIR = DATA_DIR / "train"
     VAL_DIR = DATA_DIR / "val"
     TEST_DIR = DATA_DIR / "test"
@@ -75,7 +96,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'segformerb0'
+    NAME = 'segformerb3'
 
     """
     available models:
