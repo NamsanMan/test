@@ -1,6 +1,6 @@
-import torch
 from pathlib import Path
 import numpy as np
+import os
 
 # 'COLAB_GPU'는 Colab 환경에만 존재하는 환경 변수입니다.
 IS_COLAB = 'COLAB_GPU' in os.environ
@@ -96,7 +96,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'segformerb3'
+    NAME = 'segformerb5'
 
     """
     available models:
