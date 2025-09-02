@@ -68,6 +68,42 @@ class BasicKD(BaseKDEngine):
         ])
         self._proj_built = True
 
+    def _forward_with_feats(self, model, imgs):
+        """
+        (logits, feats) 튜플을 반환.
+        1) 모델이 return_feats=True를 지원하면 그대로 사용
+        2) 안되면 HuggingFace SegFormer의 hidden_states/encoder_hidden_states를 켜서 마지막 4개 stage를 feats로 사용
+        """
+        # 1) return_feats 지원 경로 (래퍼가 이미 구현된 경우)
+        try:
+            out = model(imgs, return_feats=True)
+            if isinstance(out, tuple) and len(out) == 2:
+                return out[0], out[1]
+            if isinstance(out, dict) and "logits" in out and "feats" in out:
+                return out["logits"], out["feats"]
+        except TypeError:
+            pass  # 지원 안 하면 2)로 폴백
+
+        # 2) HF SegFormer 경로
+        if hasattr(model, "config"):
+            if hasattr(model.config, "output_hidden_states") and not model.config.output_hidden_states:
+                model.config.output_hidden_states = True  # 한 번만 켜두면 됨
+
+            outputs = model(imgs)  # return_dict=True 기본
+            logits = getattr(outputs, "logits", outputs[0] if isinstance(outputs, tuple) else None)
+
+            feats = getattr(outputs, "encoder_hidden_states", None)
+            if feats is None:
+                feats = getattr(outputs, "hidden_states", None)
+            if feats is None or len(feats) < 4:
+                raise RuntimeError("hidden_states/encoder_hidden_states를 얻지 못함. "
+                                   "모델 래퍼가 (logits, feats)를 직접 반환하도록 하거나 hidden_states를 켜세요.")
+            feats = tuple(feats[-4:])  # 마지막 4개 stage
+            return logits, feats
+
+        # 둘 다 안 되면 명시적으로 실패
+        raise RuntimeError("모델이 return_feats도, hidden_states도 지원하지 않습니다.")
+
     def _logit_kd_loss(self, s_logits, t_logits, masks):
         """
         KLDiv( log_softmax(S/T), softmax(T/T) ) * T^2, void 무시
@@ -154,13 +190,13 @@ class BasicKD(BaseKDEngine):
 
     def compute_losses(self, imgs, masks, device):
         # forward with features
-        s_logits, s_feats = self.student(imgs, return_feats=True)
+        s_logits, s_feats = self._forward_with_feats(self.student, imgs)
 
         if self._freeze_teacher:
             with torch.no_grad():
-                t_logits, t_feats = self.teacher(imgs, return_feats=True)
+                t_logits, t_feats = self._forward_with_feats(self.teacher, imgs)
         else:
-            t_logits, t_feats = self.teacher(imgs, return_feats=True)
+            t_logits, t_feats = self._forward_with_feats(self.teacher, imgs)
 
         # CE
         ce_student = self.ce_loss(s_logits, masks)

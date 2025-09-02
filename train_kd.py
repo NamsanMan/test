@@ -47,10 +47,17 @@ if config.KD.FREEZE_TEACHER:
 # ── KD 엔진 구성 ───────────────────────────────────
 kd_engine = create_kd_engine(config.KD, teacher, student).to(device)
 
+# --- build KD projections (dry-run) so their params are included in optimizer ---
+imgs0, masks0 = next(iter(data_loader.train_loader))
+with torch.no_grad():
+    _ = kd_engine.compute_losses(imgs0.to(device, non_blocking=True),
+                                 masks0.to(device, non_blocking=True),
+                                 device)
+
 # ── 옵티마이저/스케줄러 ─────────────────────────────
 params = []
 params += list(student.parameters())
-params += list(kd_engine.get_extra_parameters())
+params += list(kd_engine.get_extra_parameters())        # KD에서 projection에 이용되는 1x1 conv의 파라미터 추가
 if not config.KD.FREEZE_TEACHER and config.KD.ENGINE_PARAMS.get('w_ce_teacher', 0.0) > 0.0:
     params += list(teacher.parameters())
 
