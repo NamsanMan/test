@@ -17,10 +17,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from PIL import Image
 
-import train_transformers
-import data_loader
 import config
-import evaluate
 
 def set_seed(seed):
     """
@@ -36,6 +33,12 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
     print(f"▶ Seed is fixed to {seed}")
 
+set_seed(config.GENERAL.SEED)
+
+import train_transformers
+import data_loader
+import evaluate
+
 def decode_segmap(label_mask):
     """
     label_mask: 2D numpy array (H×W), 값은 [0..n_classes-1]
@@ -45,7 +48,6 @@ def decode_segmap(label_mask):
     return config.DATA.CLASS_COLORS[label_mask]
 
 def main():
-    set_seed(config.GENERAL.SEED)
     # 1) 학습 수행
     # train.py의 run_training을 호출하여, 가장 좋은 모델 체크포인트 경로를 반환받음
     best_ckpt = train_transformers.run_training(num_epochs=config.TRAIN.EPOCHS)

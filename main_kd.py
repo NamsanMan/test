@@ -17,10 +17,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from PIL import Image
 
-import train_kd
-import data_loader
 import config
-import evaluate
 
 def set_seed(seed):
     """
@@ -36,6 +33,12 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
     print(f"▶ Seed is fixed to {seed}")
 
+set_seed(config.GENERAL.SEED)
+
+import train_kd
+import data_loader
+import evaluate
+
 def decode_segmap(label_mask):
     """
     label_mask: 2D numpy array (H×W), 값은 [0..n_classes-1]
@@ -45,7 +48,6 @@ def decode_segmap(label_mask):
     return config.DATA.CLASS_COLORS[label_mask]
 
 def main():
-    set_seed(config.GENERAL.SEED)
     # 랜덤 이미지 시각화 할때는 seed 고정 영향 안받게 함
     visual_random = random.Random()
     # 1) 학습 수행
