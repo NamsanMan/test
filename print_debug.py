@@ -1,6 +1,6 @@
 import torch
-# kd/basic_kd.py 파일에서 BasicKD 클래스를 가져왔다고 가정합니다.
-from kd.basic_kd import BasicKD
+# kd_engines/basic_kd.py 파일에서 BasicKD 클래스를 가져왔다고 가정합니다.
+from kd_engines.basic_kd import BasicKD
 import config
 from models import create_model
 

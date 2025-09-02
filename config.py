@@ -5,7 +5,7 @@ import os
 # 'COLAB_GPU'는 Colab 환경에만 존재하는 환경 변수입니다.
 IS_COLAB = 'COLAB_GPU' in os.environ
 
-# 💡 2. 플래그 값에 따라 경로를 다르게 설정
+#  2. 플래그 값에 따라 경로를 다르게 설정
 if IS_COLAB:
     # --- Colab 환경일 때의 경로 ---
     print("▶ Running in Google Colab environment.")
@@ -96,7 +96,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'segformerb5'
+    NAME = 'segformerb3'
 
     """
     available models:
@@ -166,27 +166,29 @@ class TRAIN:
 class KD:
     ENABLE = True
 
+    ENGINE_NAME = "basic"
+
     # 모델 선택
-    TEACHER_NAME = 'segformerb3'
-    STUDENT_NAME = 'segformerb1'
-
-    # 이미 학습된 teacher .pth 경로 (없으면 None)
-    TEACHER_CKPT = r"E:\LAB\result_files\test_results\Bset_LR_segB3_360_480\best_model.pth"  # ← 당신 경로로 변경
-
-    # 온/오프 및 가중치
-    USE_LOGIT_KD = True        # logit KD 사용 여부 // teacher와 student의 label이 같지 않으면 false
-    T = 2.0                    # KD temperature
-    W_CE_STUDENT = 1.0         # 학생 CE
-    W_LOGIT = 0.05              # 로짓 KD
-    W_FEAT  = 0.25              # 피처 KD
-
-    # SegFormer 인코더 4단계 스테이지 가중치
-    STAGE_WEIGHTS = [0.25, 0.5, 0.75, 1.0]
-
+    TEACHER_NAME = 'segformerb5'
+    STUDENT_NAME = 'segformerb0'
+    # 이미 학습된 teacher .pth 경로 (없으면 None), KD경로는 일단 colab경로로 해놓음
+    TEACHER_CKPT = '/content/drive/MyDrive/LAB/result_files/test_results/Bset_LR_segb5/best_model.pth'  # ← 당신 경로로 변경
     # 교사 고정 여부
     FREEZE_TEACHER = True
-    W_CE_TEACHER = 0.0         # 교사 CE (교사도 GT로 같이 fine tunning 하지 않으려면 0.0)
 
-    # 피처 KD 시 채널 방향 L2-정규화 사용 다음 실험때 이거 없애보기
-    FEAT_L2_NORMALIZE = True
+    ALL_ENGINE_PARAMS = {
+        "basic":{
+            "stage_weights": [0.25, 0.5, 0.75, 1.0],  # SegFormer 인코더 4단계 스테이지 가중치
+            "t": 2.0,  # KD temperature
+            "w_ce_student": 1.0,  # 학생 CE
+            "w_ce_teacher": 0.0,  # 교사 CE (교사도 GT로 같이 fine tunning 하지 않으려면 0.0)
+            "w_logit": 0.05,  # 로짓 KD
+            "w_feat": 0.25,  # 피처 KD
+            "ignore_index": DATA.IGNORE_INDEX,
+            "use_logit_kd": True,  # logit KD 사용 여부 // teacher와 student의 label이 같지 않으면 false
+            "feat_l2_normalize": True,  # 피처 KD 시 채널 방향 L2-정규화 사용 다음 실험때 이거 없애보기
+            "freeze_teacher": FREEZE_TEACHER
+        }
+    }
 
+    ENGINE_PARAMS = ALL_ENGINE_PARAMS[ENGINE_NAME]

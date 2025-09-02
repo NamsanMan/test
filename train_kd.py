@@ -13,7 +13,7 @@ import config
 from models import create_model
 import evaluate
 
-from kd.basic_kd import BasicKD
+from kd_engines import create_kd_engine
 
 # 보기 싫은 로그 숨김
 import warnings
@@ -45,25 +45,13 @@ if config.KD.FREEZE_TEACHER:
         print(f"⚠️ WARNING: Failed to load teacher checkpoint. Error: {e}. Using ImageNet pretrained weights.")
 
 # ── KD 엔진 구성 ───────────────────────────────────
-kd_engine = BasicKD(
-    teacher=teacher, student=student,
-    stage_weights=config.KD.STAGE_WEIGHTS,
-    t=config.KD.T,
-    w_ce_student=config.KD.W_CE_STUDENT,
-    w_ce_teacher=config.KD.W_CE_TEACHER,
-    w_logit=config.KD.W_LOGIT if config.KD.USE_LOGIT_KD else 0.0,
-    w_feat=config.KD.W_FEAT,
-    ignore_index=config.DATA.IGNORE_INDEX,
-    use_logit_kd=config.KD.USE_LOGIT_KD,
-    feat_l2_normalize=config.KD.FEAT_L2_NORMALIZE,
-    freeze_teacher=config.KD.FREEZE_TEACHER
-).to(device)
-
+kd_engine = create_kd_engine(config.KD, teacher, student).to(device)
 
 # ── 옵티마이저/스케줄러 ─────────────────────────────
 params = []
 params += list(student.parameters())
-if not config.KD.FREEZE_TEACHER and config.KD.W_CE_TEACHER > 0.0:
+params += list(kd_engine.get_extra_parameters())
+if not config.KD.FREEZE_TEACHER and config.KD.ENGINE_PARAMS.get('w_ce_teacher', 0.0) > 0.0:
     params += list(teacher.parameters())
 
 optimizer_class = getattr(optim, config.TRAIN.OPTIMIZER["NAME"])
@@ -154,12 +142,12 @@ def write_summary(init=False, best_epoch=None, best_miou=None):
         f.write(f"Batch size    : {config.DATA.BATCH_SIZE}\n\n")
         f.write("=== Knowledge Distillation Configuration ===\n")
         f.write(f"Teacher Source CKPT: {config.KD.TEACHER_CKPT}\n")
-        f.write(f"temperature        : {config.KD.T}\n")
-        f.write(f"student CE weight  : {config.KD.W_CE_STUDENT}\n")
-        f.write(f"logit loss weight  : {config.KD.W_LOGIT}\n")
-        f.write(f"feature loss weight: {config.KD.W_FEAT}\n")
-        f.write(f"  stage weight     : {config.KD.STAGE_WEIGHTS}\n")
-        f.write(f"  feature channelwise l2 normalize: {config.KD.FEAT_L2_NORMALIZE}\n")
+        f.write(f"temperature        : {config.KD.ENGINE_PARAMS.get('t', 'N/A')}\n")
+        f.write(f"student CE weight  : {config.KD.ENGINE_PARAMS.get('w_ce_student', 'N/A')}\n")
+        f.write(f"logit loss weight  : {config.KD.ENGINE_PARAMS.get('w_logit', 'N/A')}\n")
+        f.write(f"feature loss weight: {config.KD.ENGINE_PARAMS.get('w_feat', 'N/A')}\n")
+        f.write(f"  stage weight     : {config.KD.ENGINE_PARAMS.get('stage_weights', 'N/A')}\n")
+        f.write(f"  feature channelwise l2 normalize: {config.KD.ENGINE_PARAMS.get('feat_l2_normalize', 'N/A')}\n")
         if init:
             f.write("=== Best Model (to be updated) ===\n")
             f.write("epoch     : N/A\nbest_val_mIoU : N/A\n\n")

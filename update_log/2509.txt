@@ -4,3 +4,6 @@ colab이용을 위한 git push 및 연동
 기존의 train_transformers.py의 로그 저장 방법도 train_kd.py와 동일하게 깔끔하게 하나의 .csv파일로 저장하게 설정함
 원래있던 best val miou마다 class별 iou와 confusion metrix는 주석처리
 모든 train 코드의 체크포인트(.pth)파일에 optimizer와 scheduler정보를 저장하는 코드를 추가함
+
+v250902
+config.py에 하드 코딩된 경로 2개 (BASE, DATA 경로)를 colab과 local경로별로 상황따라서 구별하여 실행하게 설정함
