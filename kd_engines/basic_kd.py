@@ -63,9 +63,17 @@ class BasicKD(BaseKDEngine):
     def _build_projs_if_needed(self, s_feats, t_feats):
         if self._proj_built:
             return
-        self.proj_s2t = nn.ModuleList([
-            _conv1x1(s.shape[1], t.shape[1]) for s, t in zip(s_feats, t_feats)
-        ])
+        device = s_feats[0].device  # ← 현재 feature의 디바이스(GPU)를 기준으로
+        mods = []
+        for sf, tf in zip(s_feats, t_feats):
+            in_c, out_c = sf.shape[1], tf.shape[1]
+            if in_c == out_c:
+                m = nn.Identity()
+            else:
+                m = nn.Conv2d(in_c, out_c, kernel_size=1, bias=False)
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            mods.append(m.to(device))  # ← 여기에서 디바이스 이동
+        self.proj_s2t = nn.ModuleList(mods)
         self._proj_built = True
 
     def _forward_with_feats(self, model, imgs):
@@ -156,6 +164,7 @@ class BasicKD(BaseKDEngine):
                 continue
 
             # 채널 정합: student -> teacher
+            proj = proj.to(sf.device)
             sf = proj(sf)
 
             # 공간 크기 정합
