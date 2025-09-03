@@ -172,7 +172,7 @@ class KD:
     TEACHER_NAME = 'segformerb5'
     STUDENT_NAME = 'segformerb0'
     # 이미 학습된 teacher .pth 경로 (없으면 None), KD경로는 일단 colab경로로 해놓음
-    TEACHER_CKPT = '/content/drive/MyDrive/LAB/result_files/test_results/Aset_LR_segb5/best_model.pth'  # ← 당신 경로로 변경
+    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Aset_LR_segb5\best_model.pth'  # ← 당신 경로로 변경
     # 교사 고정 여부
     FREEZE_TEACHER = True
 

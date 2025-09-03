@@ -23,23 +23,24 @@ class SegFormerWrapper(nn.Module):
         cfg.num_labels = num_classes
         cfg.id2label = {i: n for i, n in enumerate(config.DATA.CLASS_NAMES)}
         cfg.label2id = {n: i for i, n in enumerate(config.DATA.CLASS_NAMES)}
-        cfg.output_hidden_states = True  # 항상 stage feats 계산
+        cfg.output_hidden_states = True  # 항상 stage feats 반환한다 >> KD시 필요
 
         self.model = SegformerForSemanticSegmentation.from_pretrained(
             src, config=cfg, ignore_mismatched_sizes=True
         )
 
     def forward(self, x, return_feats: bool = False):
-        # config에서 이미 output_hidden_states=True 이므로 인자 없이 호출
+        # 위에서 이미 output_hidden_states=True 이므로 인자 없이 호출
         out = self.model(pixel_values=x, return_dict=True)
         logits = F.interpolate(out.logits, size=x.shape[-2:], mode="bilinear", align_corners=False)
 
+        # KD용 feature 반환 >> return_feats = True 일때 logit과 4개의 텐서로 4개의 feature map 반환
         if return_feats:
             feats = getattr(out, "encoder_hidden_states", None)
             if feats is None:
                 feats = getattr(out, "hidden_states", None)
             if feats is None or len(feats) < 4:
                 raise RuntimeError("SegFormer hidden_states를 얻지 못했습니다.")
-            feats = tuple(feats[-4:])  # 마지막 4개 stage
+            feats = tuple(feats[-4:])  # 마지막 4개 stage >> segformer의 encoder 부분
             return logits, feats
         return logits

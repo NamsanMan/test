@@ -7,3 +7,7 @@ colab이용을 위한 git push 및 연동
 
 v250902
 config.py에 하드 코딩된 경로 2개 (BASE, DATA 경로)를 colab과 local경로별로 상황따라서 구별하여 실행하게 설정함
+KD engine의 모듈화 및 기존 segmentation model을 효과적으로 이용하기 위해 많은 곳을 수정함
+1. models 패키지에서 segformer 계열은 하나의 모듈로 관리하게 수정 >> segformer_wrapper.py이용 >> KD 사용시 feature map 반환 편하게 하도록 코드 추가 및 수정
+2. kd_engines 패키지에서 여러 KD 방법을 효율적으로 하기 위해 전반적인 수정을 거침 >> 모든 KD 방법은 앞으로 __init__.py와 base_engine.py를 거침
+3. 기존 basic_kd.py에서 segformer끼리 KD할때, hidden stage의 channel수가 맞지 않는 경우(ex. MiT B5 -> MiT B0)를 대비해서 필요에 따라 projection사용 가능하게 코드를 추가함
