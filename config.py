@@ -167,6 +167,11 @@ class KD:
     ENABLE = True
 
     ENGINE_NAME = "basic"
+    """
+    available engines:
+    basic
+    kd_losses
+    """
 
     # 모델 선택
     TEACHER_NAME = 'segformerb5'
@@ -177,7 +182,7 @@ class KD:
     FREEZE_TEACHER = True
 
     ALL_ENGINE_PARAMS = {
-        "basic":{
+        "basic": {
             "stage_weights": [0.25, 0.5, 0.75, 1.0],  # SegFormer 인코더 4단계 스테이지 가중치
             "t": 2.0,  # KD temperature
             "w_ce_student": 1.0,  # 학생 CE
@@ -188,6 +193,13 @@ class KD:
             "use_logit_kd": True,  # logit KD 사용 여부 // teacher와 student의 label이 같지 않으면 false
             "feat_l2_normalize": True,  # 피처 KD 시 채널 방향 L2-정규화 사용 다음 실험때 이거 없애보기
             "freeze_teacher": FREEZE_TEACHER
+        },
+        "kd_losses": {
+            "t": 2.0,
+            "p": 2,
+            "w_ce_student": 1.0,
+            "w_logit": 0.05,
+            "w_feat": 0.25
         }
     }
 
