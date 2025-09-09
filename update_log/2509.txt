@@ -11,3 +11,11 @@ KD engine의 모듈화 및 기존 segmentation model을 효과적으로 이용�
 1. models 패키지에서 segformer 계열은 하나의 모듈로 관리하게 수정 >> segformer_wrapper.py이용 >> KD 사용시 feature map 반환 편하게 하도록 코드 추가 및 수정
 2. kd_engines 패키지에서 여러 KD 방법을 효율적으로 하기 위해 전반적인 수정을 거침 >> 모든 KD 방법은 앞으로 __init__.py와 base_engine.py를 거침
 3. 기존 basic_kd.py에서 segformer끼리 KD할때, hidden stage의 channel수가 맞지 않는 경우(ex. MiT B5 -> MiT B0)를 대비해서 필요에 따라 projection사용 가능하게 코드를 추가함
+
+v250904
+받은 kd_losses 패키지를 이용가능하게 kd_engines/kd_losses.py를 추가하고, models/d3p.py를 feature distillation을 위해서 수정함
+
+v250908
+DDRnet23slim 모델을 models패키지에 추가함
+앞으로 training은 200 epoch로 돌리자
+저번주에 억지로 개조한 d3p mv2는 노션 백업 코드 이용해서 복원해야죔

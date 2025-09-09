@@ -1,6 +1,7 @@
 # 1. 각 모델 파일에서 모델 클래스를 가져옵니다.
 from .segformer_wrapper import SegFormerWrapper
 from .d3p import create_deeplabv3plus as d3p
+from .model_ddrnet_23slim import DDRNet as DDRNet23Slim
 
 # 나중에 다른 모델을 추가하면 아래에 계속 추가합니다.
 # from .unet import UNet
@@ -27,6 +28,10 @@ def create_model(model_name: str):
     elif model_name == 'd3p':
         model = d3p(classes=num_classes)
         print(f"▶ Model 'DeepLabV3 plus' created.")
+
+    elif model_name == 'ddrnet23slim':
+        model = DDRNet23Slim(pretrained=True, num_classes=num_classes)
+        print(f"▶ Model 'DDRNet23Slim' created.")
 
     else:
         raise ValueError(f"Model '{model_name}' not recognized.")

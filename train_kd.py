@@ -148,6 +148,7 @@ def write_summary(init=False, best_epoch=None, best_miou=None):
         f.write(f"Scheduler     : {scheduler.__class__.__name__}\n")
         f.write(f"Batch size    : {config.DATA.BATCH_SIZE}\n\n")
         f.write("=== Knowledge Distillation Configuration ===\n")
+        f.write(f"Engine NAME        : {config.KD.ENGINE_NAME}\n")
         f.write(f"Teacher Source CKPT: {config.KD.TEACHER_CKPT}\n")
         f.write(f"temperature        : {config.KD.ENGINE_PARAMS.get('t', 'N/A')}\n")
         f.write(f"student CE weight  : {config.KD.ENGINE_PARAMS.get('w_ce_student', 'N/A')}\n")

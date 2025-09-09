@@ -13,7 +13,7 @@ if IS_COLAB:
     # Colab의 구글 드라이브 경로를 기본 경로로 설정
     BASE_DRIVE_DIR = Path('/content/drive/MyDrive/LAB')
 
-    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/A_set"
+    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/B_set"
     BASE_DIR = BASE_DRIVE_DIR / "result_files/test_results"
 
 else:
@@ -21,7 +21,7 @@ else:
     print("▶ Running in local environment.")
 
     # 기존에 사용하시던 로컬 경로 설정
-    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\A_set")
+    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\B_set")
     BASE_DIR = Path(r"E:\LAB\result_files\test_results")
 
 # ──────────────────────────────────────────────────────────────────
@@ -106,13 +106,14 @@ class MODEL:
     segformerb4
     segformerb5
     d3p
+    ddrnet23slim
     """
 
 # ──────────────────────────────────────────────────────────────────
 # 4. TRAIN: 훈련 과정 관련 설정
 # ──────────────────────────────────────────────────────────────────
 class TRAIN:
-    EPOCHS = 100
+    EPOCHS = 200
     USE_WARMUP = True
     WARMUP_EPOCHS = 5
 
@@ -175,7 +176,7 @@ class KD:
 
     # 모델 선택
     TEACHER_NAME = 'segformerb5'
-    STUDENT_NAME = 'segformerb0'
+    STUDENT_NAME = 'd3p'
     # 이미 학습된 teacher .pth 경로 (없으면 None), KD경로는 일단 colab경로로 해놓음
     TEACHER_CKPT = r'E:\LAB\result_files\test_results\Aset_LR_segb5\best_model.pth'  # ← 당신 경로로 변경
     # 교사 고정 여부
@@ -199,7 +200,9 @@ class KD:
             "p": 2,
             "w_ce_student": 1.0,
             "w_logit": 0.05,
-            "w_feat": 0.25
+            "w_feat": 0.25,
+            "ignore_index": DATA.IGNORE_INDEX,
+            "freeze_teacher": FREEZE_TEACHER
         }
     }
 
