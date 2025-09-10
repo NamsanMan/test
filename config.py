@@ -96,7 +96,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'segformerb5'
+    NAME = 'segformer_smp'
 
     """
     available models:
@@ -107,13 +107,14 @@ class MODEL:
     segformerb5
     d3p
     ddrnet23slim
+    segformer_smp
     """
 
 # ──────────────────────────────────────────────────────────────────
 # 4. TRAIN: 훈련 과정 관련 설정
 # ──────────────────────────────────────────────────────────────────
 class TRAIN:
-    EPOCHS = 200
+    EPOCHS = 100
     USE_WARMUP = True
     WARMUP_EPOCHS = 5
 

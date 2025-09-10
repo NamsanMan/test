@@ -19,3 +19,7 @@ v250908
 DDRnet23slim 모델을 models패키지에 추가함
 앞으로 training은 200 epoch로 돌리자
 저번주에 억지로 개조한 d3p mv2는 노션 백업 코드 이용해서 복원해야죔
+
+v250910
+segformer b5 200 epoch 돌린거 성능 망가진것 보고 다리 100epoch로 롤백함
+d3p 코드 커스텀하기 전으로 롤백함
