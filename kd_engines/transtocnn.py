@@ -1,178 +1,257 @@
-# kd_engines/segtoseg_kd.py
+# kd_engines/transtocnn.py
+# Heterogeneous KD: Transformer teacher (SegFormer) -> CNN student (DeepLabV3+)
+# - Distill encoder-final feature (single stage)
+# - Distill decoder-final logits
+# - Student trains; Teacher is frozen/eval.
+#
+# Usage (예시):
+#   teacher = SegFormerWrapper("segformerb5", num_classes=12).to(device).eval()
+#   student = create_deeplab(in_channels=3, classes=12).to(device)
+#   engine  = TransToCNN_KD(teacher, student, ignore_index=255)
+#   out = engine.compute_losses(imgs, masks)
+#   out["total"].backward(); optimizer.step()
+
+from typing import Dict, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .base_engine import BaseKDEngine
 
 
-class SegformerToDeepLabKD(BaseKDEngine):
+def _conv1x1(in_ch: int, out_ch: int) -> nn.Module:
+    if in_ch == out_ch:
+        return nn.Identity()
+    m = nn.Conv2d(in_ch, out_ch, kernel_size=1, bias=False)
+    nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+    return m
+
+
+def _resize_like(src: torch.Tensor, ref: torch.Tensor) -> torch.Tensor:
+    return F.interpolate(src, size=ref.shape[-2:], mode="bilinear", align_corners=False)
+
+
+def _attn_map(feat: torch.Tensor, p: int = 2) -> torch.Tensor:
+    # [B,C,H,W] -> [B,1,H,W], 채널 축 p-제곱합 후 L2 정규화
+    a = (feat.abs() ** p).sum(dim=1, keepdim=True)
+    a = a / (a.norm(p=2, dim=(2, 3), keepdim=True) + 1e-6)
+    return a
+
+def _valid_mask_like(masks: torch.Tensor, ref: torch.Tensor, ignore_index: int) -> torch.Tensor:
     """
-    Knowledge Distillation Engine for SegFormer (Teacher) to DeepLabV3+/MobileNetV2 (Student).
+    masks: [B,H,W] (long), ref: [B,C,Hr,Wr]
+    returns: [B,1,Hr,Wr] float {0.,1.}
+    """
+    # 최근접 보간으로 HxW -> Hr x Wr
+    m = F.interpolate(masks.unsqueeze(1).float(), size=ref.shape[-2:], mode="nearest").squeeze(1).long()
+    valid = (m != ignore_index).float().unsqueeze(1)
+    return valid
 
-    - Teacher (SegFormer): Outputs a list of 4 feature maps from its encoder.
-    - Student (DeepLab): Outputs a single feature map from its encoder.
-    - Feature KD: Matches the student's single feature map to a specific stage of the teacher's features.
-    - Logit KD: Handles mismatched class numbers by treating logits as features and using MSE loss.
+
+
+class TransToCNN_KD(nn.Module):
+    """
+    Final-encoder-feature KD + final-logits KD.
+
+    - Feature KD: 학생 encoder 최종 feature (S_last) vs 교사 encoder 최종 feature (T_last)
+        · 공간 정합: 기본 'teacher->student' (teacher feature를 학생 feature 크기로 보간)
+        · 채널 정합: 1x1 conv (student channels -> teacher channels)
+        · 손실: (정규화 L2) + λ_at * (AT L2), 가중치 w_feat
+
+    - Logit KD: 학생 최종 logits vs 교사 최종 logits
+        · 교사 logits을 학생 해상도로 보간
+        · KL with temperature T, 무시 인덱스 마스킹 지원, 가중치 w_kd
+
+    - CE: 학생 logits vs GT (ignore_index), 가중치 w_ce
+
+    Args:
+        teacher, student: 각각 (imgs, return_feats=True) -> (logits, feats[list]) 지원해야 함
+        ignore_index: void 인덱스
+        num_classes: 세그 클래스 수
+        T: 로짓 KD 온도
+        w_ce, w_kd, w_feat: 손실 가중치
+        lambda_at: feature AT 손실 비중 (0으로 두면 AT 비활성화)
+        match_space: "teacher_to_student" | "student_to_teacher"
+        use_feat_norm: feature L2 전에 채널방향 정규화 사용할지
     """
 
-    def __init__(self, teacher, student,
-                 teacher_feature_stage_idx: int,  # <-- 변경됨: Teacher의 어떤 stage를 쓸지 지정
-                 t: float,
-                 w_ce_student: float,
-                 w_logit: float, w_feat: float,
-                 ignore_index: int,
-                 freeze_teacher: bool = True):
-        super().__init__(teacher, student)
+    def __init__(
+        self,
+        teacher: nn.Module,
+        student: nn.Module,
+        ignore_index: int,
+        num_classes: int,
+        T: float,
+        w_ce: float = 1.0,
+        w_kd: float = 1.0,
+        w_feat: float = 0.5,
+        lambda_at: float = 0.5,
+        match_space: str = "teacher_to_student",
+        use_feat_norm: bool = True,
+    ):
+        super().__init__()
+        # teacher 고정
+        self.teacher = teacher.eval()
+        for p in self.teacher.parameters():
+            p.requires_grad_(False)
 
-        assert 0 <= teacher_feature_stage_idx < 4, "Teacher stage index must be in [0, 3]"
-        self.teacher_feature_stage_idx = teacher_feature_stage_idx
-        self.t = float(t)
-        self.w_ce_student = float(w_ce_student)
-        self.w_logit = float(w_logit)
-        self.w_feat = float(w_feat)
+        self.student = student
         self.ignore_index = int(ignore_index)
-        self._freeze_teacher = bool(freeze_teacher)
+        self.num_classes = int(num_classes)
 
-        self.ce_loss = nn.CrossEntropyLoss(ignore_index=self.ignore_index)
+        self.T = float(T)
+        self.w_ce = float(w_ce)
+        self.w_kd = float(w_kd)
+        self.w_feat = float(w_feat)
+        self.lambda_at = float(lambda_at)
+        assert match_space in ("teacher_to_student", "student_to_teacher")
+        self.match_space = match_space
+        self.use_feat_norm = bool(use_feat_norm)
 
-        if self._freeze_teacher:
-            for p in self.teacher.parameters():
-                p.requires_grad = False
-            self.teacher.eval()
+        # CE (void 무시)
+        self.ce = nn.CrossEntropyLoss(ignore_index=self.ignore_index)
 
-        # Adaptation layers for KD (built lazily on the first forward pass)
-        self._projs_built = False
-        self.feature_adaptation = nn.Identity()
-        self.logit_adaptation = nn.Identity()
+        # Lazy 초기화 멤버 (첫 forward에서 모양 보고 생성)
+        self._proj_s2t: Optional[nn.Module] = None
+        self._logit_adapter: Optional[nn.Module] = None
+        self._inited: bool = False
 
-    def train(self, mode: bool = True):
-        super().train(mode)
-        if self._freeze_teacher:
-            self.teacher.eval()
-        return self
-
-    def _build_projs_if_needed(self, s_feat, t_feat, s_logits, t_logits):
-        if self._projs_built:
+    @torch.no_grad()
+    def _init_adapters_if_needed(
+        self,
+        s_last: torch.Tensor,
+        t_last: torch.Tensor,
+        s_logits: torch.Tensor,
+        t_logits: torch.Tensor,
+    ):
+        """
+        첫 호출 시 채널 수에 맞춰 1x1 conv 등을 초기화한다.
+        - _proj_s2t: student encoder last ch -> teacher encoder last ch
+        - _logit_adapter: teacher logits ch -> num_classes (필요 시)
+        """
+        if self._inited:
             return
 
-        device = s_feat.device
+        s_ch = int(s_last.shape[1])
+        t_ch = int(t_last.shape[1])
 
-        # 1. Feature Adaptation Layer
-        s_ch, t_ch = s_feat.shape[1], t_feat.shape[1]
-        if s_ch != t_ch:
-            self.feature_adaptation = nn.Conv2d(s_ch, t_ch, kernel_size=1, bias=False).to(device)
-            nn.init.kaiming_normal_(self.feature_adaptation.weight, mode="fan_out", nonlinearity="relu")
+        self._proj_s2t = _conv1x1(s_ch, t_ch)
 
-        # 2. Logit Adaptation Layer
-        s_cls, t_cls = s_logits.shape[1], t_logits.shape[1]
-        if s_cls != t_cls:
-            self.logit_adaptation = nn.Conv2d(s_cls, t_cls, kernel_size=1, bias=False).to(device)
-            nn.init.kaiming_normal_(self.logit_adaptation.weight, mode="fan_out", nonlinearity="relu")
-
-        self._projs_built = True
-
-    def _forward_teacher(self, imgs):
-        # Assumes Hugging Face SegFormer model
-        outputs = self.teacher(pixel_values=imgs, output_hidden_states=True)
-        logits = outputs.logits
-        # Get all 4 encoder feature maps
-        features = outputs.hidden_states[-4:]
-        return logits, features
-
-    def _forward_student(self, imgs):
-        # Assumes a wrapper that returns (logits, single_encoder_feature)
-        logits, feature = self.student(imgs)
-        return logits, feature
-
-    def _logit_kd_loss_mse(self, s_logits, t_logits, masks):  # <-- 핵심 로직 변경: MSE 기반
-        if self.w_logit <= 0.0:
-            return s_logits.new_tensor(0.0)
-
-        # KD in FP32
-        s_logits, t_logits = s_logits.float(), t_logits.float()
-
-        # 1. Adapt student logit channels to match teacher's
-        s_logits_adapted = self.logit_adaptation(s_logits)
-
-        # 2. Upsample teacher logits to match student's spatial size
-        t_logits_upsampled = F.interpolate(
-            t_logits,
-            size=s_logits.shape[2:],
-            mode='bilinear',
-            align_corners=False
-        )
-
-        loss_fn = nn.MSELoss(reduction='none')
-        loss = loss_fn(s_logits_adapted, t_logits_upsampled.detach())  # (B, C, H, W)
-
-        # Mask out ignored pixels
-        valid_mask = (masks.unsqueeze(1) != self.ignore_index)  # (B, 1, H, W)
-
-        # Calculate mean loss only on valid pixels
-        if valid_mask.any():
-            kd_loss = (loss * valid_mask).sum() / valid_mask.sum()
+        tC = int(t_logits.shape[1])
+        if tC != self.num_classes:
+            # teacher logits 채널 수가 다르면 1x1 conv로 적응
+            self._logit_adapter = nn.Conv2d(tC, self.num_classes, kernel_size=1, bias=False)
+            nn.init.kaiming_normal_(self._logit_adapter.weight, mode="fan_out", nonlinearity="relu")
         else:
-            kd_loss = s_logits.new_tensor(0.0)
+            self._logit_adapter = nn.Identity()
 
-        return kd_loss
+        self._inited = True
+        # 엔진 전체를 student와 동일 디바이스로 옮겨두는 것이 안전
+        dev = s_last.device
+        self.to(dev)
 
-    def _feat_kd_loss(self, s_feat, t_feat, masks):  # <-- 핵심 로직 변경: 1-to-1 매칭
-        if self.w_feat <= 0.0:
-            return s_feat.new_tensor(0.0)
+    @torch.no_grad()
+    def _t_forward(self, x: torch.Tensor):
+        return self.teacher(x, return_feats=True)
 
-        s_feat, t_feat = s_feat.float(), t_feat.float()
+    def _kl_div_masked(self, s_logits: torch.Tensor, t_logits: torch.Tensor, masks: Optional[torch.Tensor]) -> torch.Tensor:
+        # teacher logits을 student 크기로
+        t = _resize_like(t_logits, s_logits)
+        if not isinstance(self._logit_adapter, nn.Identity):
+            t = self._logit_adapter(t)
 
-        # Adapt student feature channels to match teacher's
-        s_feat_adapted = self.feature_adaptation(s_feat)
+        s_log = F.log_softmax(s_logits / self.T, dim=1)
+        t_prb = F.softmax(t / self.T, dim=1)
+        kl = F.kl_div(s_log, t_prb, reduction="none")  # [B,C,H,W]
 
-        # Align spatial size if they don't match
-        if s_feat_adapted.shape[-2:] != t_feat.shape[-2:]:
-            s_feat_adapted = F.interpolate(
-                s_feat_adapted,
-                size=t_feat.shape[-2:],
-                mode='bilinear',
-                align_corners=False
-            )
+        if masks is not None:
+            valid = (masks != self.ignore_index).float().unsqueeze(1)
+            kl = kl * valid
+            denom = valid.sum().clamp_min(1.0)
+            return (kl.sum() * (self.T ** 2)) / denom
 
-        loss_fn = nn.MSELoss()
-        kd_loss = loss_fn(s_feat_adapted, t_feat.detach())
-        return kd_loss
+        return kl.mean() * (self.T ** 2)
 
-    def compute_losses(self, imgs, masks, device):
-        # Forward pass for student and teacher
-        s_logits, s_feat = self._forward_student(imgs)
+    def _feat_kd_single(self, s_last: torch.Tensor, t_last: torch.Tensor,
+                        masks: Optional[torch.Tensor]) -> torch.Tensor:
+        # 공간 정합
+        if self.match_space == "teacher_to_student":
+            t_aligned = _resize_like(t_last, s_last)
+            s_aligned = s_last
+            ref_for_mask = s_aligned
+        else:  # "student_to_teacher"
+            s_aligned = _resize_like(s_last, t_last)
+            t_aligned = t_last
+            ref_for_mask = s_aligned  # 손실을 계산하는 공간에 마스크를 맞춥니다.
 
+        # 채널 정합: student -> teacher ch
+        s_proj = self._proj_s2t(s_aligned)
+
+        # 정규화 L2 준비
+        if self.use_feat_norm:
+            s_norm = F.normalize(s_proj, dim=1)
+            t_norm = F.normalize(t_aligned, dim=1)
+        else:
+            s_norm, t_norm = s_proj, t_aligned
+
+        # ----- void 마스크 적용 -----
+        if masks is not None:
+            valid = _valid_mask_like(masks, ref_for_mask, self.ignore_index)  # [B,1,H,W]
+            denom = valid.sum().clamp_min(1.0)
+
+            # L2 (masked)
+            diff = (s_norm - t_norm) ** 2  # [B,C,H,W]
+            l2 = (diff * valid).sum() / denom
+
+            # AT (masked, 선택)
+            if self.lambda_at > 0.0:
+                as_ = _attn_map(s_proj)
+                at_ = _attn_map(t_aligned)
+                at_diff = (as_ - at_) ** 2  # [B,1,H,W]
+                at_loss = (at_diff * valid).sum() / denom
+                return l2 + self.lambda_at * at_loss
+            else:
+                return l2
+        # ----- 마스크 없음 (기존 방식) -----
+        else:
+            l2 = F.mse_loss(s_norm, t_norm)
+            if self.lambda_at > 0.0:
+                as_ = _attn_map(s_proj)
+                at_ = _attn_map(t_aligned)
+                at_loss = F.mse_loss(as_, at_)
+                return l2 + self.lambda_at * at_loss
+            else:
+                return l2
+
+    def compute_losses(self, imgs: torch.Tensor, masks: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """
+        Returns:
+            dict(total, ce_student, kd_logit, kd_feat)
+        """
+        # (안전) 엔진이 아직 다른 디바이스라면 맞춰준다
+        if next(self.parameters(), torch.empty(0, device=imgs.device)).device != imgs.device:
+            self.to(imgs.device)
+
+        # student forward
+        s_logits, s_feats = self.student(imgs, return_feats=True)
+        s_last = s_feats[-1]  # encoder 최종 feature
+
+        # teacher forward (no grad)
         with torch.no_grad():
-            t_logits, t_feats = self._forward_teacher(imgs)
+            t_logits, t_feats = self._t_forward(imgs)
+            t_last = t_feats[-1]
 
-        # Select the target teacher feature map based on the index
-        t_feat_target = t_feats[self.teacher_feature_stage_idx]
+        # lazy init adapters
+        self._init_adapters_if_needed(s_last, t_last, s_logits, t_logits)
 
-        # Lazily build adaptation layers on the first pass
-        self._build_projs_if_needed(s_feat, t_feat_target, s_logits, t_logits)
+        # losses
+        loss_ce = self.ce(s_logits, masks)
+        loss_kd = self._kl_div_masked(s_logits, t_logits, masks)
+        loss_f = self._feat_kd_single(s_last, t_last, masks)
 
-        # Standard Cross-Entropy loss for the student
-        ce_student = self.ce_loss(s_logits, masks)
-
-        # Knowledge Distillation losses
-        kd_logit = self._logit_kd_loss_mse(s_logits, t_logits, masks)
-        kd_feat = self._feat_kd_loss(s_feat, t_feat_target, masks)
-
-        # Total weighted loss
-        total = (self.w_ce_student * ce_student +
-                 self.w_logit * kd_logit +
-                 self.w_feat * kd_feat)
+        total = self.w_ce * loss_ce + self.w_kd * loss_kd + self.w_feat * loss_f
 
         return {
             "total": total,
-            "ce_student": ce_student.detach(),
-            "kd_logit": kd_logit.detach(),
-            "kd_feat": kd_feat.detach(),
-            "s_logits": s_logits
+            "ce_student": loss_ce.detach(),
+            "kd_logit": loss_kd.detach(),
+            "kd_feat": loss_f.detach(),
         }
-
-    def get_extra_parameters(self):
-        # Expose adaptation layer parameters to the optimizer
-        if not self._projs_built:
-            return []
-        return list(self.feature_adaptation.parameters()) + list(self.logit_adaptation.parameters())

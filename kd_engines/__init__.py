@@ -1,10 +1,12 @@
 from .segtoseg_kd import SegToSegKD
 from .kd_losses import KDWithLoss
+from .transtocnn import TransToCNN_KD
 
 # 사용할 수 있는 KD 엔진들을 등록
 KD_ENGINE_REGISTRY = {
     "segtoseg": SegToSegKD,
-    "kd_losses": KDWithLoss
+    "kd_losses": KDWithLoss,
+    "transtocnn": TransToCNN_KD
     # 여기에 새로운 KD 엔진(예: "attention": AttentionKD)을 추가하면 됨
 }
 

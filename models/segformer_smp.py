@@ -1,3 +1,7 @@
+"""
+나중에 혹시 CNN-Tansformer Hybrid network 사용해 보고 싶을때 해보려고 만들어놓음
+"""
+
 import segmentation_models_pytorch as smp
 
 ENCODER_NAME = "mit_b0"

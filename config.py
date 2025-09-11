@@ -61,7 +61,7 @@ class DATA:
     FILE_LIST = None
 
     # 입력 이미지 해상도 >> 원본 이미지의 크기가 아닌 모델에 들어가게 되는 input size
-    INPUT_RESOLUTION = (368, 480)  # H, W
+    INPUT_RESOLUTION = (360, 480)  # H, W
 
     # 배치 사이즈 및 데이터 로딩 워커 수
     BATCH_SIZE = 4
@@ -96,7 +96,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'd3p'
+    NAME = 'segformerb5'
 
     """
     available models:
@@ -168,11 +168,12 @@ class TRAIN:
 class KD:
     ENABLE = True
 
-    ENGINE_NAME = "segtoseg"
+    ENGINE_NAME = "transtocnn"
     """
     available engines:
     segtoseg
     kd_losses
+    transtocnn
     """
 
     # 모델 선택
@@ -204,6 +205,16 @@ class KD:
             "w_feat": 0.25,
             "ignore_index": DATA.IGNORE_INDEX,
             "freeze_teacher": FREEZE_TEACHER
+        },
+        "transtocnn": {
+            "ignore_index": DATA.IGNORE_INDEX,
+            "num_classes": DATA.NUM_CLASSES,
+            "T": 4.0,
+            "w_ce": 1.0,
+            "w_kd": 1.0,
+            "w_feat": 0.5,
+            "lambda_at": 0.5,
+            "use_feat_norm": True
         }
     }
 
