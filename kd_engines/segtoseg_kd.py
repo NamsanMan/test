@@ -1,4 +1,4 @@
-# kd_engines/basic_kd.py
+# kd_engines/segtoseg_kd.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -13,7 +13,7 @@ def _conv1x1(in_ch, out_ch):
     return m
 
 
-class BasicKD(BaseKDEngine):
+class SegToSegKD(BaseKDEngine):
     """
     - teacher, student: SegFormer 래퍼 (forward(..., return_feats=True) 지원)
     - compute_losses(imgs, masks, device) -> dict(loss 항목들)

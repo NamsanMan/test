@@ -61,7 +61,7 @@ class DATA:
     FILE_LIST = None
 
     # 입력 이미지 해상도 >> 원본 이미지의 크기가 아닌 모델에 들어가게 되는 input size
-    INPUT_RESOLUTION = (360, 480)  # H, W
+    INPUT_RESOLUTION = (368, 480)  # H, W
 
     # 배치 사이즈 및 데이터 로딩 워커 수
     BATCH_SIZE = 4
@@ -96,7 +96,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'segformer_smp'
+    NAME = 'd3p'
 
     """
     available models:
@@ -168,10 +168,10 @@ class TRAIN:
 class KD:
     ENABLE = True
 
-    ENGINE_NAME = "basic"
+    ENGINE_NAME = "segtoseg"
     """
     available engines:
-    basic
+    segtoseg
     kd_losses
     """
 
@@ -184,7 +184,7 @@ class KD:
     FREEZE_TEACHER = True
 
     ALL_ENGINE_PARAMS = {
-        "basic": {
+        "segtoseg": {
             "stage_weights": [0.25, 0.5, 0.75, 1.0],  # SegFormer 인코더 4단계 스테이지 가중치
             "t": 2.0,  # KD temperature
             "w_ce_student": 1.0,  # 학생 CE

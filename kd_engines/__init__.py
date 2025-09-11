@@ -1,9 +1,9 @@
-from .basic_kd import BasicKD
+from .segtoseg_kd import SegToSegKD
 from .kd_losses import KDWithLoss
 
 # 사용할 수 있는 KD 엔진들을 등록
 KD_ENGINE_REGISTRY = {
-    "basic": BasicKD,
+    "segtoseg": SegToSegKD,
     "kd_losses": KDWithLoss
     # 여기에 새로운 KD 엔진(예: "attention": AttentionKD)을 추가하면 됨
 }
