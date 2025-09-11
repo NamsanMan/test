@@ -1,6 +1,6 @@
 # 1. 각 모델 파일에서 모델 클래스를 가져옵니다.
 from .segformer_wrapper import SegFormerWrapper
-from .d3p import create_deeplabv3plus as d3p
+from .d3p import create_model as d3p
 from .model_ddrnet_23slim import DDRNet as DDRNet23Slim
 from .segformer_smp import create_segformer_smp as segformer_smp
 
