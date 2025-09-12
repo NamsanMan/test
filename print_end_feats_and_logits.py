@@ -25,7 +25,7 @@ def main():
 
     # 입력 텐서 (네가 관측한 해상도에 맞춤)
     imgs_teacher = torch.randn(1, 3, 360, 480, device=device)  # SegFormer 입력 예시
-    imgs_student = torch.randn(1, 3, 368, 480, device=device)  # DeepLab 입력 예시
+    imgs_student = torch.randn(1, 3, 360, 480, device=device)  # DeepLab 입력 예시
 
     # 모델 생성
     teacher = SegFormerWrapper("segformerb5", num_classes=num_classes).to(device).eval()

@@ -23,3 +23,12 @@ DDRnet23slim 모델을 models패키지에 추가함
 v250910
 segformer b5 200 epoch 돌린거 성능 망가진것 보고 다리 100epoch로 롤백함
 d3p 코드 커스텀하기 전으로 롤백함
+
+v250911
+models/d3p.py를 featuremap, logit 반환하게 래퍼를 추가하여 수정함 문제없이 잘 돌아가는 것을 확인
+kd_engines/transtocnn.py를 1차적으로 완성함 >> segformer에서 d3p로 KD하는 코드
+
+v250912
+models/d3p.py에서 368*480같이 16의 배수를 받아야지만 돌아가는데 teacher인 segformer b5가 360*480으로 checkpoint 만들어놓고 368*480으로 돌리면 성능이 2프로 가까이 떨어져 d3p쪽을 수정
+>>d3p에서 해상도 문제가 발생하면 내부적으로 모델에 들어가기 전에 padding을 하고 추후 crop을 하게끔 d3p.py코드를 수정
+또한 사용하는 모든 main.py에서 checkpoint 사용여부(이 시점에서는 훈련을 진행할지 말지의 여부)를 config의 TRAIN에서 USE_CHEKCPOINT로 제어하게 조건문 추가

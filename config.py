@@ -13,7 +13,7 @@ if IS_COLAB:
     # Colab의 구글 드라이브 경로를 기본 경로로 설정
     BASE_DRIVE_DIR = Path('/content/drive/MyDrive/LAB')
 
-    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/A_set"
+    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/B_set"
     BASE_DIR = BASE_DRIVE_DIR / "result_files/test_results"
 
 else:
@@ -21,7 +21,7 @@ else:
     print("▶ Running in local environment.")
 
     # 기존에 사용하시던 로컬 경로 설정
-    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\A_set")
+    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\B_set")
     BASE_DIR = Path(r"E:\LAB\result_files\test_results")
 
 # ──────────────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'segformerb5'
+    NAME = 'd3p'
 
     """
     available models:
@@ -117,6 +117,9 @@ class TRAIN:
     EPOCHS = 100
     USE_WARMUP = True
     WARMUP_EPOCHS = 5
+
+    # main문 실행시 checkpoint 로드할것인지 설정
+    USE_CHECKPOINT = False
 
     # 딕셔너리 형태로 통일
     OPTIMIZER = {

@@ -50,17 +50,23 @@ def decode_segmap(label_mask):
 def main():
     # 랜덤 이미지 시각화 할때는 seed 고정 영향 안받게 함
     visual_random = random.Random()
-    # 1) 학습 수행
-    # train.py의 run_training을 호출하여, 가장 좋은 모델 체크포인트 경로를 반환받음
-    best_ckpt = train_kd.run_training(num_epochs=config.TRAIN.EPOCHS)
+
+    if config.TRAIN.USE_CHECKPOINT:
+        ##### train 안하고 checkpoint만 로드할 때 ######
+        checkpoint_name = 'best_model.pth'
+        best_ckpt = config.GENERAL.BASE_DIR / checkpoint_name
+        if not best_ckpt.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {best_ckpt}")
+    else:
+        # 1) 학습 수행
+        # train.py의 run_training을 호출하여, 가장 좋은 모델 체크포인트 경로를 반환받음
+        best_ckpt = train_kd.run_training(num_epochs=config.TRAIN.EPOCHS)
 
     ##### train 안하고 checkpoint만 로드할 때 ######
-    """
     checkpoint_name = 'best_model.pth'
     best_ckpt = config.GENERAL.BASE_DIR / checkpoint_name
     if not best_ckpt.exists():
         raise FileNotFoundError(f"Checkpoint not found: {best_ckpt}")
-    """
 
     # 2) test를 위해 베스트 체크포인트 로드(student) (모델 정보와 epoch 정보만 불러온다, 학습 재개를 위한다면 코드 수정필요)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
