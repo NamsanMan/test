@@ -58,16 +58,16 @@ class TransToCNN_KD(nn.Module):
 
     - Logit KD: 학생 최종 logits vs 교사 최종 logits
         · 교사 logits을 학생 해상도로 보간
-        · KL with temperature T, 무시 인덱스 마스킹 지원, 가중치 w_kd
+        · KL with temperature T, 무시 인덱스 마스킹 지원, 가중치 w_logit
 
-    - CE: 학생 logits vs GT (ignore_index), 가중치 w_ce
+    - CE: 학생 logits vs GT (ignore_index), 가중치 w_ce_student
 
     Args:
         teacher, student: 각각 (imgs, return_feats=True) -> (logits, feats[list]) 지원해야 함
         ignore_index: void 인덱스
         num_classes: 세그 클래스 수
         T: 로짓 KD 온도
-        w_ce, w_kd, w_feat: 손실 가중치
+        w_ce_student, w_logit, w_feat: 손실 가중치
         lambda_at: feature AT 손실 비중 (0으로 두면 AT 비활성화)
         match_space: "teacher_to_student" | "student_to_teacher"
         use_feat_norm: feature L2 전에 채널방향 정규화 사용할지
@@ -79,9 +79,9 @@ class TransToCNN_KD(nn.Module):
         student: nn.Module,
         ignore_index: int,
         num_classes: int,
-        T: float,
-        w_ce: float = 1.0,
-        w_kd: float = 1.0,
+        t: float,
+        w_ce_student: float = 1.0,
+        w_logit: float = 1.0,
         w_feat: float = 0.5,
         lambda_at: float = 0.5,
         match_space: str = "teacher_to_student",
@@ -97,9 +97,9 @@ class TransToCNN_KD(nn.Module):
         self.ignore_index = int(ignore_index)
         self.num_classes = int(num_classes)
 
-        self.T = float(T)
-        self.w_ce = float(w_ce)
-        self.w_kd = float(w_kd)
+        self.t = float(t)
+        self.w_ce_student = float(w_ce_student)
+        self.w_logit = float(w_logit)
         self.w_feat = float(w_feat)
         self.lambda_at = float(lambda_at)
         assert match_space in ("teacher_to_student", "student_to_teacher")
@@ -158,17 +158,17 @@ class TransToCNN_KD(nn.Module):
         if not isinstance(self._logit_adapter, nn.Identity):
             t = self._logit_adapter(t)
 
-        s_log = F.log_softmax(s_logits / self.T, dim=1)
-        t_prb = F.softmax(t / self.T, dim=1)
+        s_log = F.log_softmax(s_logits / self.t, dim=1)
+        t_prb = F.softmax(t / self.t, dim=1)
         kl = F.kl_div(s_log, t_prb, reduction="none")  # [B,C,H,W]
 
         if masks is not None:
             valid = (masks != self.ignore_index).float().unsqueeze(1)
             kl = kl * valid
             denom = valid.sum().clamp_min(1.0)
-            return (kl.sum() * (self.T ** 2)) / denom
+            return (kl.sum() * (self.t ** 2)) / denom
 
-        return kl.mean() * (self.T ** 2)
+        return kl.mean() * (self.t ** 2)
 
     def _feat_kd_single(self, s_last: torch.Tensor, t_last: torch.Tensor,
                         masks: Optional[torch.Tensor]) -> torch.Tensor:
@@ -221,11 +221,26 @@ class TransToCNN_KD(nn.Module):
             else:
                 return l2
 
-    def compute_losses(self, imgs: torch.Tensor, masks: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def compute_losses(
+        self,
+        imgs: torch.Tensor,
+        masks: torch.Tensor,
+        device: Optional[torch.device] = None,
+        **_
+    ) -> Dict[str, torch.Tensor]:
         """
         Returns:
             dict(total, ce_student, kd_logit, kd_feat)
         """
+        # (선택) device가 넘어오면 모두 안전하게 이동
+        if device is not None:
+            if next(self.parameters(), torch.empty(0, device=device)).device != device:
+                self.to(device)
+            if imgs.device != device:
+                imgs = imgs.to(device, non_blocking=True)
+            if masks.device != device:
+                masks = masks.to(device, non_blocking=True)
+
         # (안전) 엔진이 아직 다른 디바이스라면 맞춰준다
         if next(self.parameters(), torch.empty(0, device=imgs.device)).device != imgs.device:
             self.to(imgs.device)
@@ -243,15 +258,15 @@ class TransToCNN_KD(nn.Module):
         self._init_adapters_if_needed(s_last, t_last, s_logits, t_logits)
 
         # losses
-        loss_ce = self.ce(s_logits, masks)
-        loss_kd = self._kl_div_masked(s_logits, t_logits, masks)
-        loss_f = self._feat_kd_single(s_last, t_last, masks)
+        ce_student = self.ce(s_logits, masks)
+        kd_logit = self._kl_div_masked(s_logits, t_logits, masks)
+        kd_feat  = self._feat_kd_single(s_last, t_last, masks)
 
-        total = self.w_ce * loss_ce + self.w_kd * loss_kd + self.w_feat * loss_f
+        total = self.w_ce_student * ce_student + self.w_logit * kd_logit + self.w_feat * kd_feat
 
         return {
             "total": total,
-            "ce_student": loss_ce.detach(),
-            "kd_logit": loss_kd.detach(),
-            "kd_feat": loss_f.detach(),
+            "ce_student": ce_student.detach(),
+            "kd_logit": kd_logit.detach(),
+            "kd_feat": kd_feat.detach(),
         }

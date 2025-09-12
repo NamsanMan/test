@@ -13,7 +13,7 @@ if IS_COLAB:
     # Colab의 구글 드라이브 경로를 기본 경로로 설정
     BASE_DRIVE_DIR = Path('/content/drive/MyDrive/LAB')
 
-    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/B_set"
+    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/A_set"
     BASE_DIR = BASE_DRIVE_DIR / "result_files/test_results"
 
 else:
@@ -21,7 +21,7 @@ else:
     print("▶ Running in local environment.")
 
     # 기존에 사용하시던 로컬 경로 설정
-    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\B_set")
+    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\A_set")
     BASE_DIR = Path(r"E:\LAB\result_files\test_results")
 
 # ──────────────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ else:
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "TEMP2"
+    PROJECT_NAME = "TEMP"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -212,9 +212,9 @@ class KD:
         "transtocnn": {
             "ignore_index": DATA.IGNORE_INDEX,
             "num_classes": DATA.NUM_CLASSES,
-            "T": 4.0,
-            "w_ce": 1.0,
-            "w_kd": 1.0,
+            "t": 4.0,
+            "w_ce_student": 1.0,
+            "w_logit": 1.0,
             "w_feat": 0.5,
             "lambda_at": 0.5,
             "use_feat_norm": True
