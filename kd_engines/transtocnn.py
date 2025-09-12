@@ -270,3 +270,15 @@ class TransToCNN_KD(nn.Module):
             "kd_logit": kd_logit.detach(),
             "kd_feat": kd_feat.detach(),
         }
+
+    def get_extra_parameters(self):
+        """Return parameters of lazy-built adaptation layers."""
+        if not self._inited:
+            return []
+
+        params = []
+        if self._proj_s2t is not None:
+            params += list(self._proj_s2t.parameters())
+        if self._logit_adapter is not None:
+            params += list(self._logit_adapter.parameters())
+        return params
