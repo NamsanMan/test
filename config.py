@@ -211,13 +211,7 @@ class KD:
         },
         "transtocnn": {
             "ignore_index": DATA.IGNORE_INDEX,
-            "num_classes": DATA.NUM_CLASSES,
-            "t": 4.0,
-            "w_ce_student": 1.0,
-            "w_logit": 1.0,
-            "w_feat": 0.5,
-            "lambda_at": 0.5,
-            "use_feat_norm": True
+            "num_classes": DATA.NUM_CLASSES
         }
     }
 
