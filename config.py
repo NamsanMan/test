@@ -114,7 +114,7 @@ class MODEL:
 # 4. TRAIN: 훈련 과정 관련 설정
 # ──────────────────────────────────────────────────────────────────
 class TRAIN:
-    EPOCHS = 200
+    EPOCHS = 100
     USE_WARMUP = True
     WARMUP_EPOCHS = 5
 
@@ -171,12 +171,12 @@ class TRAIN:
 class KD:
     ENABLE = True
 
-    ENGINE_NAME = "transtocnn"
+    ENGINE_NAME = "transtocnn_pca_gl"
     """
     available engines:
     segtoseg
     kd_losses
-    transtocnn
+    transtocnn_pca_gl
     """
 
     # 모델 선택
@@ -209,9 +209,14 @@ class KD:
             "ignore_index": DATA.IGNORE_INDEX,
             "freeze_teacher": FREEZE_TEACHER
         },
-        "transtocnn": {
-            "ignore_index": DATA.IGNORE_INDEX,
-            "num_classes": DATA.NUM_CLASSES
+        "transtocnn_pca_gl": {
+            "w_ce_student": 1.0,
+            "w_pca": 0.5,
+            "w_gl": 0.5,
+            "pca_qk_channels": 64,
+            "pca_v_channels": 128,
+            "gl_dropout_p": 0.1,
+            "ignore_index": DATA.IGNORE_INDEX
         }
     }
 

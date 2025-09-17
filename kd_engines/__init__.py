@@ -1,12 +1,12 @@
 from .segtoseg_kd import SegToSegKD
 #from .kd_losses import KDWithLoss
-from .transtocnn_pca_gl import TransToCNN_PCA_GL_KD
+from .transtocnn_pca_gl import CrossArchSegKD
 
 # 사용할 수 있는 KD 엔진들을 등록
 KD_ENGINE_REGISTRY = {
     "segtoseg": SegToSegKD,
     #"kd_losses": KDWithLoss,
-    "transtocnn": TransToCNN_PCA_GL_KD
+    "transtocnn_pca_gl": CrossArchSegKD
     # 여기에 새로운 KD 엔진(예: "attention": AttentionKD)을 추가하면 됨
 }
 

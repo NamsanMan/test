@@ -163,7 +163,7 @@ def train_one_epoch_kd(kd_engine, loader, optimizer, device):
             epoch_losses[key] += _loss_value_to_float(value)
 
         postfix = {}
-        for key in SCALAR_LOSS_KEYS[:4]:
+        for key in SCALAR_LOSS_KEYS:
             value = out.get(key)
             if value is None or not _is_scalar_loss_value(value):
                 continue
