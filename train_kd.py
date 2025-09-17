@@ -213,13 +213,20 @@ def write_summary(init=False, best_epoch=None, best_miou=None):
         f.write(f"Batch size    : {config.DATA.BATCH_SIZE}\n\n")
         f.write("=== Knowledge Distillation Configuration ===\n")
         f.write(f"Engine NAME        : {config.KD.ENGINE_NAME}\n")
-        f.write(f"Teacher Source CKPT: {config.KD.TEACHER_CKPT}\n")
-        f.write(f"temperature        : {config.KD.ENGINE_PARAMS.get('t', 'N/A')}\n")
-        f.write(f"student CE weight  : {config.KD.ENGINE_PARAMS.get('w_ce_student', 'N/A')}\n")
-        f.write(f"logit loss weight  : {config.KD.ENGINE_PARAMS.get('w_logit', 'N/A')}\n")
-        f.write(f"feature loss weight: {config.KD.ENGINE_PARAMS.get('w_feat', 'N/A')}\n")
-        f.write(f"  stage weight     : {config.KD.ENGINE_PARAMS.get('stage_weights', 'N/A')}\n")
-        f.write(f"  feature channelwise l2 normalize: {config.KD.ENGINE_PARAMS.get('feat_l2_normalize', 'N/A')}\n")
+        f.write(f"Teacher Source CKPT: {config.KD.TEACHER_CKPT}\n\n")
+        # 1. 현재 설정된 엔진의 파라미터 딕셔너리를 가져옵니다.
+        engine_name = config.KD.ENGINE_NAME
+        current_engine_params = config.KD.ALL_ENGINE_PARAMS.get(engine_name, {})
+        f.write(f"--- Parameters for '{engine_name}' engine ---\n")
+        # 2. 가져온 딕셔너리를 반복하면서 모든 파라미터를 자동으로 기록합니다.
+        if not current_engine_params:
+            f.write("No parameters found for this engine.\n")
+        else:
+            for key, value in current_engine_params.items():
+                # 보기 좋게 정렬하기 위해 key 문자열의 길이를 25로 맞춥니다.
+                f.write(f"{key:<25} : {value}\n")
+        f.write("\n")
+
         if init:
             f.write("=== Best Model (to be updated) ===\n")
             f.write("epoch     : N/A\nbest_val_mIoU : N/A\n\n")
