@@ -114,7 +114,7 @@ class MODEL:
 # 4. TRAIN: 훈련 과정 관련 설정
 # ──────────────────────────────────────────────────────────────────
 class TRAIN:
-    EPOCHS = 100
+    EPOCHS = 200
     USE_WARMUP = True
     WARMUP_EPOCHS = 5
 

@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, List
 
 import data_loader
 import config
@@ -18,6 +19,42 @@ from kd_engines import create_kd_engine
 # 보기 싫은 로그 숨김
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
+LOSS_KEY_DISPLAY_OVERRIDES = {
+    "total": "Total Loss",
+    "ce_student": "CE Student Loss",
+    "ce_teacher": "CE Teacher Loss",
+    "kd_logit": "KD Logit Loss",
+    "kd_feat": "KD Feature Loss",
+    "pca_total": "PCA Total Loss",
+    "pca_attn": "PCA Attention Loss",
+    "pca_v": "PCA Value Loss",
+    "gl_loss": "GL Loss",
+}
+
+SCALAR_LOSS_KEYS: List[str] = []
+LOSS_KEY_TO_HEADER: Dict[str, str] = {}
+LOSS_HEADER_ORDER: List[str] = []
+
+
+def _is_scalar_loss_value(value) -> bool:
+    if isinstance(value, torch.Tensor):
+        return value.dim() == 0
+    return isinstance(value, (int, float))
+
+
+def _loss_value_to_float(value) -> float:
+    if isinstance(value, torch.Tensor):
+        return float(value.item())
+    return float(value)
+
+
+def _display_name_for_loss(key: str) -> str:
+    if key in LOSS_KEY_DISPLAY_OVERRIDES:
+        return LOSS_KEY_DISPLAY_OVERRIDES[key]
+    pretty = key.replace('_', ' ').title()
+    if "loss" not in key.lower():
+        pretty = f"{pretty} Loss"
+    return pretty
 
 # model 설정
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -50,9 +87,28 @@ kd_engine = create_kd_engine(config.KD, teacher, student).to(device)
 # --- build KD projections (dry-run) so their params are included in optimizer ---
 imgs0, masks0 = next(iter(data_loader.train_loader))
 with torch.no_grad():
-    _ = kd_engine.compute_losses(imgs0.to(device, non_blocking=True),
-                                 masks0.to(device, non_blocking=True),
-                                 device)
+    dry_run_out = kd_engine.compute_losses(imgs0.to(device, non_blocking=True),
+                                           masks0.to(device, non_blocking=True),
+                                           device)
+
+if "total" not in dry_run_out:
+    raise KeyError("KD engine must return a 'total' loss entry.")
+
+SCALAR_LOSS_KEYS = [
+    key for key, value in dry_run_out.items() if _is_scalar_loss_value(value)
+]
+
+if "total" in SCALAR_LOSS_KEYS:
+    SCALAR_LOSS_KEYS.remove("total")
+    SCALAR_LOSS_KEYS.insert(0, "total")
+else:
+    SCALAR_LOSS_KEYS.insert(0, "total")
+
+LOSS_KEY_TO_HEADER = {key: _display_name_for_loss(key) for key in SCALAR_LOSS_KEYS}
+
+LOSS_HEADER_ORDER = [LOSS_KEY_TO_HEADER[key] for key in SCALAR_LOSS_KEYS]
+
+print("▶ Tracking losses:", ", ".join(LOSS_KEY_TO_HEADER.values()))
 
 # ── 옵티마이저/스케줄러 ─────────────────────────────
 params = []
@@ -80,13 +136,10 @@ else:
 # 1epoch당 학습 방법 설정 후 loss값 반환
 def train_one_epoch_kd(kd_engine, loader, optimizer, device):
     kd_engine.train()
+    if not SCALAR_LOSS_KEYS:
+        raise RuntimeError("No scalar losses registered from KD engine dry-run.")
     # 각 손실을 저장할 딕셔너리 초기화
-    epoch_losses = {
-        "total": 0.0,
-        "ce_student": 0.0,
-        "kd_logit": 0.0,
-        "kd_feat": 0.0
-    }
+    epoch_losses = {key: 0.0 for key in SCALAR_LOSS_KEYS}
     pbar = tqdm(loader, ascii=True, dynamic_ncols=True, leave=True, desc="Training")
     for imgs, masks in pbar:
         imgs = imgs.to(device, non_blocking=True)
@@ -94,19 +147,30 @@ def train_one_epoch_kd(kd_engine, loader, optimizer, device):
 
         optimizer.zero_grad(set_to_none=True)
         out = kd_engine.compute_losses(imgs, masks, device)
-        out["total"].backward()
+        total_loss = out.get("total")
+        if total_loss is None:
+            raise KeyError("KD engine output does not contain 'total' loss.")
+        if not isinstance(total_loss, torch.Tensor):
+            raise TypeError("'total' loss must be a torch.Tensor for backpropagation.")
+        total_loss.backward()
         optimizer.step()
 
         # 각 손실 값을 누적
         for key in epoch_losses:
-            epoch_losses[key] += out[key].item()
+            value = out.get(key)
+            if value is None or not _is_scalar_loss_value(value):
+                continue
+            epoch_losses[key] += _loss_value_to_float(value)
 
-        pbar.set_postfix({
-            "loss": f'{out["total"].item():.3f}',
-            "ce_s": f'{out["ce_student"].item():.3f}',
-            "kd_l": f'{out["kd_logit"].item():.3f}',
-            "kd_f": f'{out["kd_feat"].item():.3f}'
-        })
+        postfix = {}
+        for key in SCALAR_LOSS_KEYS[:4]:
+            value = out.get(key)
+            if value is None or not _is_scalar_loss_value(value):
+                continue
+            postfix_label = LOSS_KEY_TO_HEADER.get(key, key)
+            postfix[postfix_label] = f'{_loss_value_to_float(value):.3f}'
+        if postfix:
+            pbar.set_postfix(postfix)
 
     # 평균 손실 값 계산
     num_batches = len(loader)
@@ -188,18 +252,23 @@ def run_training(num_epochs):
 
     # CSV 로그 파일 경로 설정 및 헤더 생성
     log_csv_path = config.GENERAL.LOG_DIR / "training_log.csv"
-    csv_headers = [
-        "Epoch", "Total Loss", "CE Student Loss", "KD Logit Loss", "KD Feature Loss",
-        "Val mIoU", "Pixel Acc", "LR"
-    ]
+    loss_headers = LOSS_HEADER_ORDER if LOSS_HEADER_ORDER else ["Total Loss"]
+    csv_headers = ["Epoch", *loss_headers, "Val mIoU", "Pixel Acc", "LR"]
     # 클래스별 IoU 헤더 추가
     for class_name in config.DATA.CLASS_NAMES:
         csv_headers.append(f"IoU_{class_name}")
 
     # 파일이 없으면 헤더를 포함하여 새로 생성
-    if not log_csv_path.exists():
-        df_log = pd.DataFrame(columns=csv_headers)
-        df_log.to_csv(log_csv_path, index=False)
+    if log_csv_path.exists():
+        try:
+            existing_cols = list(pd.read_csv(log_csv_path, nrows=0).columns)
+            if len(existing_cols) > 0:
+                csv_headers = existing_cols  # 기존 헤더 신뢰
+        except Exception:
+            pass
+    else:
+        # 새 파일 생성 시에만 헤더를 기록
+        pd.DataFrame(columns=csv_headers).to_csv(log_csv_path, index=False)
 
     train_losses, val_losses = [], []
     loss_class = getattr(nn, config.TRAIN.LOSS_FN["NAME"])
@@ -229,23 +298,23 @@ def run_training(num_epochs):
 
         current_lr = optimizer.param_groups[0]['lr']
         # CSV 파일에 성능 지표 기록
-        log_data = {
-            "Epoch": epoch,
-            "Total Loss": tr_losses_dict["total"],
-            "CE Student Loss": tr_losses_dict["ce_student"],
-            "KD Logit Loss": tr_losses_dict["kd_logit"],
-            "KD Feature Loss": tr_losses_dict["kd_feat"],
+        log_data = {"Epoch": epoch}
+        for key in SCALAR_LOSS_KEYS:
+            header_name = LOSS_KEY_TO_HEADER.get(key, key)
+            log_data[header_name] = tr_losses_dict.get(key, float("nan"))
+
+        log_data.update({
             "Val mIoU": miou,
             "Pixel Acc": pa,
-            "LR": current_lr
-        }
+            "LR": current_lr,
+        })
         # 클래스별 IoU를 log_data 딕셔너리에 추가
         per_cls_iou = metrics["per_class_iou"]
         for i, class_name in enumerate(config.DATA.CLASS_NAMES):
             log_data[f"IoU_{class_name}"] = per_cls_iou[i]
 
         # DataFrame으로 변환 후 CSV 파일에 append
-        df_new_row = pd.DataFrame([log_data])
+        df_new_row = pd.DataFrame([log_data]).reindex(columns=csv_headers)
         df_new_row.to_csv(log_csv_path, mode='a', header=False, index=False)
 
         # best model 갱신 시 로그 기록

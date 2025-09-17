@@ -32,3 +32,7 @@ v250912
 models/d3p.py에서 368*480같이 16의 배수를 받아야지만 돌아가는데 teacher인 segformer b5가 360*480으로 checkpoint 만들어놓고 368*480으로 돌리면 성능이 2프로 가까이 떨어져 d3p쪽을 수정
 >>d3p에서 해상도 문제가 발생하면 내부적으로 모델에 들어가기 전에 padding을 하고 추후 crop을 하게끔 d3p.py코드를 수정
 또한 사용하는 모든 main.py에서 checkpoint 사용여부(이 시점에서는 훈련을 진행할지 말지의 여부)를 config의 TRAIN에서 USE_CHEKCPOINT로 제어하게 조건문 추가
+
+v250916
+heterogeneous KD의 SOTA 중 하나인 PCA및 GL method를 추가함
+복잡해지고 다양해지는 KD method를 위해 train_kd.py에서 처음에 dry run 실행하여 training에 필요한 loss의 index를 자동으로 찾아서 반환하게 설정함
