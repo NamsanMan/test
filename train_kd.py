@@ -294,7 +294,10 @@ def run_training(num_epochs):
         if epoch <= config.TRAIN.WARMUP_EPOCHS:
             warmup.step()
         else:
-            scheduler.step()
+            # ReduceLROnPlateau 사용시
+            scheduler.step(vl_loss)
+            # 미사용시
+            #scheduler.step()
 
         train_losses.append(tr_loss)
         val_losses.append(vl_loss)
@@ -311,6 +314,7 @@ def run_training(num_epochs):
             log_data[header_name] = tr_losses_dict.get(key, float("nan"))
 
         log_data.update({
+            "Val Loss": vl_loss,
             "Val mIoU": miou,
             "Pixel Acc": pa,
             "LR": current_lr,
