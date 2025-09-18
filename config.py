@@ -211,8 +211,8 @@ class KD:
         },
         "transtocnn_pca_gl": {
             "w_ce_student": 1.0,
-            "w_pca": 0.5,
-            "w_gl": 0.5,
+            "w_pca": 0.1,
+            "w_gl": 0.1,
             "pca_qk_channels": 64,
             "pca_v_channels": 128,
             "gl_dropout_p": 0.1,

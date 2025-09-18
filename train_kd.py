@@ -120,8 +120,8 @@ if not config.KD.FREEZE_TEACHER and config.KD.ENGINE_PARAMS.get('w_ce_teacher', 
 optimizer_class = getattr(optim, config.TRAIN.OPTIMIZER["NAME"])
 optimizer = optimizer_class(params, **config.TRAIN.OPTIMIZER["PARAMS"])
 
-scheduler_class = getattr(optim.lr_scheduler, config.TRAIN.SCHEDULER_CALR["NAME"])
-scheduler = scheduler_class(optimizer, **config.TRAIN.SCHEDULER_CALR["PARAMS"])
+scheduler_class = getattr(optim.lr_scheduler, config.TRAIN.SCHEDULER_RoP["NAME"])
+scheduler = scheduler_class(optimizer, **config.TRAIN.SCHEDULER_RoP["PARAMS"])
 
 # warm-up
 if config.TRAIN.USE_WARMUP:
