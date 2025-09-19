@@ -120,8 +120,8 @@ if not config.KD.FREEZE_TEACHER and config.KD.ENGINE_PARAMS.get('w_ce_teacher', 
 optimizer_class = getattr(optim, config.TRAIN.OPTIMIZER["NAME"])
 optimizer = optimizer_class(params, **config.TRAIN.OPTIMIZER["PARAMS"])
 
-scheduler_class = getattr(optim.lr_scheduler, config.TRAIN.SCHEDULER_RoP["NAME"])
-scheduler = scheduler_class(optimizer, **config.TRAIN.SCHEDULER_RoP["PARAMS"])
+scheduler_class = getattr(optim.lr_scheduler, config.TRAIN.SCHEDULER_CALR["NAME"])
+scheduler = scheduler_class(optimizer, **config.TRAIN.SCHEDULER_CALR["PARAMS"])
 
 # warm-up
 if config.TRAIN.USE_WARMUP:
@@ -260,7 +260,7 @@ def run_training(num_epochs):
     # CSV 로그 파일 경로 설정 및 헤더 생성
     log_csv_path = config.GENERAL.LOG_DIR / "training_log.csv"
     loss_headers = LOSS_HEADER_ORDER if LOSS_HEADER_ORDER else ["Total Loss"]
-    csv_headers = ["Epoch", *loss_headers, "Val mIoU", "Pixel Acc", "LR"]
+    csv_headers = ["Epoch", *loss_headers, "Val Loss", "Val mIoU", "Pixel Acc", "LR"]
     # 클래스별 IoU 헤더 추가
     for class_name in config.DATA.CLASS_NAMES:
         csv_headers.append(f"IoU_{class_name}")
@@ -295,9 +295,9 @@ def run_training(num_epochs):
             warmup.step()
         else:
             # ReduceLROnPlateau 사용시
-            scheduler.step(vl_loss)
+            #scheduler.step(vl_loss)
             # 미사용시
-            #scheduler.step()
+            scheduler.step()
 
         train_losses.append(tr_loss)
         val_losses.append(vl_loss)

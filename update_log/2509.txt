@@ -36,3 +36,7 @@ models/d3p.py에서 368*480같이 16의 배수를 받아야지만 돌아가는�
 v250916
 heterogeneous KD의 SOTA 중 하나인 PCA및 GL method를 추가함
 복잡해지고 다양해지는 KD method를 위해 train_kd.py에서 처음에 dry run 실행하여 training에 필요한 loss의 index를 자동으로 찾아서 반환하게 설정함
+
+v250919
+KD시에는 스케쥴러 RoP 별로 안좋은 것 같아서 CosineAnnealingLR로 바꿈
+
