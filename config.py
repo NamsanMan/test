@@ -13,7 +13,7 @@ if IS_COLAB:
     # Colab의 구글 드라이브 경로를 기본 경로로 설정
     BASE_DRIVE_DIR = Path('/content/drive/MyDrive/LAB')
 
-    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_v4/A_set"
+    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_v4/B_set"
     BASE_DIR = BASE_DRIVE_DIR / "result_files/test_results"
 
 else:
@@ -175,7 +175,7 @@ class KD:
     """
     available engines:
     segtoseg
-    kd_losses
+    logit
     transtocnn_pca_gl
     """
 
@@ -183,7 +183,7 @@ class KD:
     TEACHER_NAME = 'segformerb5'
     STUDENT_NAME = 'd3p'
     # 이미 학습된 teacher .pth 경로 (없으면 None), KD경로는 일단 colab경로로 해놓음
-    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Aset_LR_segb5\best_model.pth'  # ← 당신 경로로 변경
+    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_LR_segb5\best_model.pth'  # ← 당신 경로로 변경
     # 교사 고정 여부
     FREEZE_TEACHER = True
 
@@ -200,12 +200,10 @@ class KD:
             "feat_l2_normalize": True,  # 피처 KD 시 채널 방향 L2-정규화 사용 다음 실험때 이거 없애보기
             "freeze_teacher": FREEZE_TEACHER
         },
-        "kd_losses": {
-            "t": 2.0,
-            "p": 2,
+        "logit": {
             "w_ce_student": 1.0,
-            "w_logit": 0.05,
-            "w_feat": 0.25,
+            "w_kd_logit": 1.0,
+            "temperature": 2.0,
             "ignore_index": DATA.IGNORE_INDEX,
             "freeze_teacher": FREEZE_TEACHER
         },

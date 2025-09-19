@@ -39,4 +39,4 @@ heterogeneous KD의 SOTA 중 하나인 PCA및 GL method를 추가함
 
 v250919
 KD시에는 스케쥴러 RoP 별로 안좋은 것 같아서 CosineAnnealingLR로 바꿈
-
+HR teacher와 LW student KD 실험 시작해보려고 함
