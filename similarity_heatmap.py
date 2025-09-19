@@ -1,8 +1,9 @@
 """Generate a similarity heatmap between DeepLabV3+ and SegFormer intermediate features.
 
 The similarity is measured using centered kernel alignment (CKA). The script collects
-intermediate features from both networks, computes pair-wise linear CKA scores and
-visualises the result as a heatmap.
+intermediate features from both networks on real CamVid samples provided by
+``data_loader.py``, computes pair-wise linear CKA scores and visualises the result as a
+heatmap.
 """
 from __future__ import annotations
 
@@ -12,6 +13,10 @@ from typing import Iterable, List, Sequence
 import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
+# --- 변경점 1: DataLoader 및 data_loader import 추가 ---
+from torch.utils.data import DataLoader
+import data_loader as project_data_loader
+# ---------------------------------------------------
 
 from models.d3p import DEFAULT_STAGE_INDICES, create_model
 from models.segformer_wrapper import SegFormerWrapper
@@ -31,10 +36,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--segformer-name", type=str, default="segformerb0",
                         help="SegFormer variant declared in models/segformer_wrapper.py")
     parser.add_argument("--num-classes", type=int, default=12)
-    parser.add_argument("--input-height", type=int, default=360)
-    parser.add_argument("--input-width", type=int, default=480)
     parser.add_argument("--batch-size", type=int, default=2)
-    parser.add_argument("--num-batches", type=int, default=4)
+    parser.add_argument("--num-batches", type=int, default=8,
+                        help="Number of batches to sample for the CKA computation.")
     parser.add_argument("--pool-size", type=int, default=16,
                         help="Adaptive AvgPool spatial size before flatten. 0 disables pooling.")
     parser.add_argument("--device", type=str,
@@ -42,6 +46,45 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--use-amp", action="store_true", default=True,
                         help="Use torch.cuda.amp.autocast for faster inference.")
+
+    # --- 변경점 2: 데이터 로더 관련 인자 다시 추가 ---
+    parser.add_argument(
+        "--data-split",
+        type=str,
+        choices=("train", "val", "test"),
+        default="val",
+        help="Dataset split declared in data_loader.py used to source real images.",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=0,
+        help="Number of worker processes for the DataLoader that reads real images.",
+    )
+    parser.add_argument(
+        "--pin-memory",
+        action="store_true",
+        help="Pin host memory for faster host to GPU transfers.",
+    )
+    parser.add_argument(
+        "--shuffle",
+        dest="shuffle",
+        action="store_true",
+        help="Shuffle the dataset before sampling batches (enabled by default for train split).",
+    )
+    parser.add_argument(
+        "--no-shuffle",
+        dest="shuffle",
+        action="store_false",
+        help="Disable shuffling even when the training split is used.",
+    )
+    parser.set_defaults(shuffle=None)
+    parser.add_argument(
+        "--drop-last",
+        action="store_true",
+        help="Drop the last incomplete batch from the data loader when sampling inputs.",
+    )
+    # -----------------------------------------------
     return parser.parse_args()
 
 
@@ -104,9 +147,9 @@ def collect_features(
     for batch in inputs:
         if use_autocast:
             with torch.cuda.amp.autocast(dtype=torch.float16):
-                logits, features = model(batch, return_feats=True)
+                _, features = model(batch, return_feats=True)
         else:
-            logits, features = model(batch, return_feats=True)
+            _, features = model(batch, return_feats=True)
 
         if not collected:
             collected = [[] for _ in range(len(features))]
@@ -120,65 +163,61 @@ def collect_features(
 
 
 def _center_gram(K: torch.Tensor) -> torch.Tensor:
-    n = K.size(0)
-    I = torch.eye(n, device=K.device, dtype=K.dtype)
-    H = I - (1.0 / n)
-    # H @ K @ H  ; implement as HK = K - row/col means + grand mean
     K_centered = K - K.mean(dim=0, keepdim=True) - K.mean(dim=1, keepdim=True) + K.mean()
     return K_centered
 
 
 def linear_cka_samplewise(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    """Fast linear CKA using sample-wise Gram matrices (works well when D >> N).
-    x, y: (N, D) on SAME device.
-    Returns a scalar tensor.
-    """
-    # Center features (per-dim)
+    """Fast linear CKA using sample-wise Gram matrices (works well when D >> N)."""
     x = x - x.mean(dim=0, keepdim=True)
     y = y - y.mean(dim=0, keepdim=True)
 
-    Kx = x @ x.T          # (N, N)
-    Ky = y @ y.T          # (N, N)
+    Kx = x @ x.T
+    Ky = y @ y.T
 
     Kx = _center_gram(Kx)
     Ky = _center_gram(Ky)
 
     num = (Kx * Ky).sum()
     denom = Kx.norm(p="fro") * Ky.norm(p="fro")
-    return (num / (denom + 1e-12))
+    return num / (denom + 1e-12)
 
 
 def compute_similarity_matrix(
     deeplab_feats: Sequence[torch.Tensor],
     segformer_feats: Sequence[torch.Tensor],
 ) -> torch.Tensor:
-    # all tensors are on device
     m, n = len(deeplab_feats), len(segformer_feats)
     out = torch.zeros(m, n, device=deeplab_feats[0].device)
     for i, df in enumerate(deeplab_feats):
         for j, sf in enumerate(segformer_feats):
-            # align N if needed
             N = min(df.shape[0], sf.shape[0])
             out[i, j] = linear_cka_samplewise(df[:N], sf[:N])
-    return out  # ON DEVICE
+    return out
 
 
+# --- 변경점 3: 더미 데이터 생성 함수를 실제 데이터 로더용 함수로 교체 ---
 def prepare_inputs(
+    loader: DataLoader,
     device: torch.device,
-    batch_size: int,
     num_batches: int,
-    height: int,
-    width: int,
-    seed: int,
-) -> Iterable[torch.Tensor]:
-    g = torch.Generator(device=device)
-    g.manual_seed(seed)
-    for _ in range(num_batches):
-        yield torch.rand(batch_size, 3, height, width, device=device, generator=g)
+) -> List[torch.Tensor]:
+    """DataLoader에서 num_batches 만큼 데이터를 추출하여 device로 보냅니다."""
+    batches: List[torch.Tensor] = []
+    for batch_idx, (images, _labels) in enumerate(loader):
+        if batch_idx >= num_batches:
+            break
+        batches.append(images.to(device, non_blocking=True))
+    if not batches:
+        raise RuntimeError(
+            "No batches were drawn from the dataset. Reduce --num-batches or check the data paths."
+        )
+    return batches
+# -------------------------------------------------------------
 
 
 def plot_heatmap(
-    matrix: torch.Tensor,  # can be on device
+    matrix: torch.Tensor,
     deeplab_labels: Sequence[str],
     segformer_labels: Sequence[str],
 ) -> None:
@@ -207,7 +246,6 @@ def main() -> None:
     args = parse_args()
     device = torch.device(args.device)
 
-    # speed knobs
     if device.type == "cuda":
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
@@ -227,22 +265,44 @@ def main() -> None:
         device=device,
     )
 
-    inputs = list(
-        prepare_inputs(
-            device=device,
-            batch_size=args.batch_size,
-            num_batches=args.num_batches,
-            height=args.input_height,
-            width=args.input_width,
-            seed=args.seed,
+    # --- 변경점 4: main 함수에 실제 데이터 로딩 로직 추가 ---
+    dataset_by_split = {
+        "train": project_data_loader.train_dataset,
+        "val": project_data_loader.val_dataset,
+        "test": project_data_loader.test_dataset,
+    }
+    try:
+        dataset = dataset_by_split[args.data_split]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported split '{args.data_split}'.") from exc
+    if dataset is None:
+        raise RuntimeError(
+            f"Dataset for split '{args.data_split}' is not available. Check data_loader.py initialisation."
         )
+
+    shuffle = args.shuffle if args.shuffle is not None else args.data_split == "train"
+    loader_generator = torch.Generator()
+    loader_generator.manual_seed(args.seed)
+    input_loader = DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=shuffle,
+        num_workers=args.num_workers,
+        pin_memory=args.pin_memory,
+        drop_last=args.drop_last,
+        generator=loader_generator,
     )
 
-    # collect features ON GPU
+    inputs = prepare_inputs(
+        loader=input_loader,
+        device=device,
+        num_batches=args.num_batches,
+    )
+    # ----------------------------------------------------
+
     deeplab_feats = collect_features(deeplab, inputs, pool_size=args.pool_size, use_amp=args.use_amp)
     segformer_feats = collect_features(segformer, inputs, pool_size=args.pool_size, use_amp=args.use_amp)
 
-    # compute CKA ON GPU (Gram on samples => fast)
     cka_matrix = compute_similarity_matrix(deeplab_feats, segformer_feats)
 
     deeplab_labels = [f"Stage {idx}" for idx in deeplab_stages]
