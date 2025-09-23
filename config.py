@@ -96,7 +96,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'segformerb5'
+    NAME = 'd3p'
 
     """
     available models:
@@ -171,7 +171,7 @@ class TRAIN:
 class KD:
     ENABLE = True
 
-    ENGINE_NAME = "transtocnn_pca_gl"
+    ENGINE_NAME = "logit"
     """
     available engines:
     segtoseg
@@ -183,7 +183,7 @@ class KD:
     TEACHER_NAME = 'segformerb5'
     STUDENT_NAME = 'd3p'
     # 이미 학습된 teacher .pth 경로 (없으면 None), KD경로는 일단 colab경로로 해놓음
-    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_LR_segb5\best_model.pth'  # ← 당신 경로로 변경
+    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_segb5\best_model.pth'  # ← 당신 경로로 변경
     # 교사 고정 여부
     FREEZE_TEACHER = True
 
@@ -202,7 +202,7 @@ class KD:
         },
         "logit": {
             "w_ce_student": 1.0,
-            "w_kd_logit": 1.0,
+            "w_kd_logit": 0.1,
             "temperature": 2.0,
             "ignore_index": DATA.IGNORE_INDEX,
             "freeze_teacher": FREEZE_TEACHER
