@@ -1,245 +1,142 @@
-"""Pyramid Scene Parsing Network"""
-import math
-import sys
-import time
-from timm.models.layers import DropPath, to_2tuple, trunc_normal_
+"""Utilities for Global-Local Attention based feature alignment."""
+from typing import Optional, Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['get_GLA_model']
+__all__ = ["get_GLA_model", "GLA_model", "GlobalLocalAttentionAlign"]
+
+
+def _pair(value: int) -> Tuple[int, int]:
+    if isinstance(value, tuple):
+        return value
+    return (value, value)
 
 
 class PatchEmbed(nn.Module):
-    def __init__(self, img_size=128, patch_size=8, stride=8, in_chans=3, embed_dim=64):
+    """A lightweight patch embedding layer used by the original GLA module."""
+
+    def __init__(self, in_chans: int, embed_dim: int, patch_size: int, stride: Optional[int] = None) -> None:
         super().__init__()
-        patch_size = to_2tuple(patch_size)
-        self.img_size = img_size
-        self.patch_size = patch_size
-        self.H, self.W = img_size[0] // patch_size[0], img_size[1] // patch_size[1]
-        self.num_patches = self.H * self.W
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride,
-                              padding=0)
+        patch_size_2d = _pair(patch_size)
+        stride = stride if stride is not None else patch_size
+        stride_2d = _pair(stride)
+
+        self.patch_size = patch_size_2d
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size_2d, stride=stride_2d, padding=0)
         self.norm = nn.LayerNorm(embed_dim)
-    def forward(self, x):
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, Tuple[int, int]]:
+        # Pad so that spatial dims are divisible by patch size
+        H, W = x.shape[-2:]
+        pad_h = (self.patch_size[0] - H % self.patch_size[0]) % self.patch_size[0]
+        pad_w = (self.patch_size[1] - W % self.patch_size[1]) % self.patch_size[1]
+        if pad_h or pad_w:
+            x = F.pad(x, (0, pad_w, 0, pad_h), mode="replicate")
+
         x = self.proj(x)
-        _, _, H, W = x.shape
-        x = x.flatten(2).transpose(1, 2)
-        x = self.norm(x) # torch.Size([4, 256, 64])
-        return x, H, W#打印x的维度！
+        _, _, Hp, Wp = x.shape
+        tokens = x.flatten(2).transpose(1, 2)
+        tokens = self.norm(tokens)
+        return tokens, (Hp, Wp)
+
 
 class SelfAttention(nn.Module):
-    def __init__(self, embed_size):
-        super(SelfAttention, self).__init__()
-        self.embed_size = embed_size
+    def __init__(self, embed_size: int) -> None:
+        super().__init__()
         self.query = nn.Linear(embed_size, embed_size)
         self.key = nn.Linear(embed_size, embed_size)
         self.value = nn.Linear(embed_size, embed_size)
         self.softmax = nn.Softmax(dim=-1)
-    
-    def forward(self, patches):
-        # print(patches.shape)
-        # patches: (batch_size, num_patches, embed_size)
-        # 线性变换得到 Q, K, V
-        Q = self.query(patches)  # (batch_size, num_patches, embed_size)
-        K = self.key(patches)     # (batch_size, num_patches, embed_size)
-        V = self.value(patches)   # (batch_size, num_patches, embed_size)
-        # 计算注意力分数 (Q * K^T) / sqrt(d_k)
-        attention_scores = torch.bmm(Q, K.transpose(1, 2))  # (batch_size, num_patches, num_patches)
-        d_k = Q.size(-1)
-        attention_scores /= d_k ** 0.5  # 缩放
-        
-        # 计算权重（使用 softmax）
-        attention_weights = self.softmax(attention_scores)  # (batch_size, num_patches, num_patches)
-        # 计算加权求和得到输出
-        output = torch.bmm(attention_weights, V)  # (batch_size, num_patches, embed_size)
-        # print('output:',output.shape)
-        # print('attention:',attention_weights.shape)
-        return output, attention_weights #torch.Size([4, 256, 64]) torch.Size([4, 256, 256])
+
+    def forward(self, patches: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        q = self.query(patches)
+        k = self.key(patches)
+        v = self.value(patches)
+
+        attn = torch.bmm(q, k.transpose(1, 2))
+        attn = attn / (q.size(-1) ** 0.5)
+        attn = self.softmax(attn)
+        out = torch.bmm(attn, v)
+        return out, attn
 
 
-class GLA_model(nn.Module):
-    def __init__(self, batchsize):
-        super(GLA_model, self).__init__()
-        self.batchsize = batchsize
-        self.criterion = nn.MSELoss()
+class GlobalLocalAttentionAlign(nn.Module):
+    """Global-Local Attention distillation loss.
 
-        '''
-        stage1
-        torch.Size([4, 16384, 64])  B 128 128 C
-        torch.Size([4, 64, 128, 128])
-        
-        stage2
-        torch.Size([4, 4096, 128])  B 64 64 C
-        torch.Size([4, 128, 64, 64])
-        
-        stage3
-        torch.Size([4, 1024, 320])  B 32 32 C
-        torch.Size([4, 256, 64, 64])
-        
-        stage4
-        torch.Size([4, 256, 512]) B 16 16 C
-        torch.Size([4, 512, 64, 64])
-        
-        vit patch embed
-        stage 1 2 3 4
-        stride 4 2 2 2
-        patch size 7 3 3 3
-        
-        cnn patch embed
-        stage 1 2 3 4
-        stride 1 1 2 2
-        patch size 7 3 3 3
+    The original repository assumed fixed feature shapes.  This implementation
+    keeps the spirit of the method while adapting all projections lazily to the
+    incoming feature tensors from the current code base.
+    """
 
-        '''
-        img_size=[512,512]
-        embed_dims=[128,128,256,320,512,512,64,64]
+    def __init__(self, embed_dim: int = 64, patch_size: int = 8, stride: Optional[int] = None) -> None:
+        super().__init__()
+        self.embed_dim = int(embed_dim)
+        self.patch_size = int(patch_size)
+        self.stride = stride if stride is not None else patch_size
 
-        # self.sim=torch.nn.CosineSimilarity(dim=-1)
-        self.sim=torch.nn.CosineSimilarity(dim=1)
-        self.patch_embed_s4 = PatchEmbed(
-            img_size=(img_size[0], img_size[1]),
-            patch_size=4,
-            stride=4,
-            in_chans=embed_dims[-2],
-            embed_dim=embed_dims[-1]
-        )
-        self.patch_embed_t4 = PatchEmbed(
-            img_size=(img_size[0], img_size[1]),
-            patch_size=4,
-            stride=4,
-            in_chans=embed_dims[-2],
-            embed_dim=embed_dims[-1]
-        )
-        self.sim=torch.nn.CosineSimilarity(dim=1)
-        self.patch_embed_s8 = PatchEmbed(
-            img_size=(img_size[0], img_size[1]),
-            patch_size=8,
-            stride=8,
-            in_chans=embed_dims[-2],
-            embed_dim=embed_dims[-1]
-        )
-        self.patch_embed_t8 = PatchEmbed(
-            img_size=(img_size[0], img_size[1]),
-            patch_size=8,
-            stride=8,
-            in_chans=embed_dims[-2],
-            embed_dim=embed_dims[-1]
-        )
-        self.sim=torch.nn.CosineSimilarity(dim=1)
-        self.patch_embed_s16 = PatchEmbed(
-            img_size=(img_size[0], img_size[1]),
-            patch_size=16,
-            stride=16,
-            in_chans=embed_dims[-2],
-            embed_dim=embed_dims[-1]
-        )
-        self.patch_embed_t16 = PatchEmbed(
-            img_size=(img_size[0], img_size[1]),
-            patch_size=16,
-            stride=16,
-            in_chans=embed_dims[-2],
-            embed_dim=embed_dims[-1]
-        )
-        self.patch_embed_s8_04 = PatchEmbed(
-            img_size=(img_size[0], img_size[1]),
-            patch_size=8,
-            stride=8,
-            in_chans=32,
-            embed_dim=32
-        )
-        self.patch_embed_t8_04 = PatchEmbed(
-            img_size=(img_size[0], img_size[1]),
-            patch_size=8,
-            stride=8,
-            in_chans=32,
-            embed_dim=32
-        )
-        self.sa_1 = SelfAttention(embed_dims[-1])
-        self.sa_2 = SelfAttention(embed_dims[-1])
-        self.sa_1_04 = SelfAttention(32)
-        self.sa_2_04 = SelfAttention(32)
-        self.conv_c1010=nn.Conv2d(256, 32, kernel_size=1)
-    def forward(self, f_t, f_s):
-#         B,C,H,W = f_s .shape
-#         f_t = f_t.reshape(B,C,H,W) # torch.Size([4, 64, 128, 128])
-#         # #4*4
-#         # f_t4, H, W = self.patch_embed_t4(f_t) # torch.Size([4, 1024, 64]) 
-#         # f_s4, H, W = self.patch_embed_s4(f_s) # torch.Size([4, 1024, 64])
-#         # ca_s_14,ca_s4 = self.sa_1(f_s4) # torch.Size([4, 1024, 64]) torch.Size([4, 1024, 1024])
-#         # ca_t_14,ca_t4 = self.sa_2(f_t4)
-#         # loss1 = (ca_t4 - ca_s4)**2
-#         # loss14 = loss1.sum()
-#         #8*8
-#         f_t8, H, W = self.patch_embed_t8(f_t) # torch.Size([4, 256, 64]) 
-#         f_s8, H, W = self.patch_embed_s8(f_s) # torch.Size([4, 256, 64])
-#         ca_s_18,ca_s8 = self.sa_1(f_s8) # torch.Size([4, 256, 64]) torch.Size([4, 256, 256])
-#         ca_t_18,ca_t8 = self.sa_2(f_t8)
-#         loss2 = (ca_t8 - ca_s8)**2
-#         loss28 = loss2.sum()
-#         # #16*16
-#         # f_t16, H, W = self.patch_embed_t16(f_t) # torch.Size([4, 64, 64]) 
-#         # # print("f_t16:",f_t16.shape)
-#         # f_s16, H, W = self.patch_embed_s16(f_s) # torch.Size([4, 64, 64])
-#         # # print("f_s16:",f_s16.shape)
-#         # ca_s_116,ca_s16 = self.sa_1(f_s16) # torch.Size([4, 64, 64]) torch.Size([4, 64, 64])
-#         # # print("ca_s_116:",ca_s_116.shape)
-#         # # print("ca_s16:",ca_s16.shape)
-#         # ca_t_116,ca_t16 = self.sa_2(f_t16)
-#         # # print("ca_t_116:",ca_t_116.shape)
-#         # # print("ca_t16:",ca_t16.shape)
-#         # # loss = 1 - torch.mean(self.sim(ca_s, ca_t))
-#         # # loss = loss1.sum()
-#         # # loss_st = self.criterion(ca_t,ca_s)
-#         # loss3 = (ca_t16 - ca_s16)**2
-#         # loss316 = loss3.sum()
-        
-#         # loss = loss14 + loss28 + loss316
-        # print(f_t.shape)
-        # print(f_s.shape)
-        # torch.Size([4, 256, 90, 120])
-        # torch.Size([4, 10800, 32])
-        B=4
-        C2=32
-        H1=90
-        W1=120
-        # B,C,H,W = f_s .shape
-        # print(f_t.shape) # torch.Size([4, 16384, 32])
-        f_s = f_s.reshape(B,C2,H1,W1)# torch.Size([4, 32, 128, 128])
-        f_t = self.conv_c1010(f_t)
-        f_t8, H, W = self.patch_embed_t8_04(f_t) # torch.Size([4, 256, 64]) 
-        f_s8, H, W = self.patch_embed_s8_04(f_s) # torch.Size([4, 256, 64])
-        ca_s_18,ca_s8 = self.sa_1_04(f_s8) # torch.Size([4, 256, 64]) torch.Size([4, 256, 256])
-        ca_t_18,ca_t8 = self.sa_2_04(f_t8)
-        loss2 = (ca_t8 - ca_s8)**2
-        loss28 = loss2.sum()
-        
-        return loss28
+        # Modules are built lazily once feature shapes are known
+        self.student_proj: Optional[nn.Module] = None
+        self.teacher_proj: Optional[nn.Module] = None
+        self.student_patch: Optional[nn.Module] = None
+        self.teacher_patch: Optional[nn.Module] = None
+        self.student_attn: Optional[nn.Module] = None
+        self.teacher_attn: Optional[nn.Module] = None
+
+    def _build_if_needed(self, student_c: int, teacher_c: int, device: torch.device) -> None:
+        if self.student_proj is not None:
+            return
+
+        self.student_proj = nn.Conv2d(student_c, self.embed_dim, kernel_size=1, bias=False).to(device)
+        self.teacher_proj = nn.Conv2d(teacher_c, self.embed_dim, kernel_size=1, bias=False).to(device)
+
+        self.student_patch = PatchEmbed(self.embed_dim, self.embed_dim, self.patch_size, self.stride).to(device)
+        self.teacher_patch = PatchEmbed(self.embed_dim, self.embed_dim, self.patch_size, self.stride).to(device)
+
+        self.student_attn = SelfAttention(self.embed_dim).to(device)
+        self.teacher_attn = SelfAttention(self.embed_dim).to(device)
+
+    def forward(self, teacher_feat: torch.Tensor, student_feat: torch.Tensor) -> torch.Tensor:
+        device = student_feat.device
+        self._build_if_needed(student_feat.shape[1], teacher_feat.shape[1], device)
+        assert self.student_proj is not None and self.teacher_proj is not None
+        assert self.student_patch is not None and self.teacher_patch is not None
+        assert self.student_attn is not None and self.teacher_attn is not None
+
+        target_size = student_feat.shape[-2:]
+        teacher_feat = F.interpolate(teacher_feat, size=target_size, mode="bilinear", align_corners=False)
+
+        s_proj = self.student_proj(student_feat)
+        t_proj = self.teacher_proj(teacher_feat)
+
+        s_tokens, _ = self.student_patch(s_proj)
+        t_tokens, _ = self.teacher_patch(t_proj)
+
+        # If padding leads to slightly different token counts, align them
+        if s_tokens.shape[1] != t_tokens.shape[1]:
+            min_tokens = min(s_tokens.shape[1], t_tokens.shape[1])
+            s_tokens = s_tokens[:, :min_tokens, :]
+            t_tokens = t_tokens[:, :min_tokens, :]
+
+        _, s_attn = self.student_attn(s_tokens)
+        _, t_attn = self.teacher_attn(t_tokens)
+
+        return F.mse_loss(s_attn, t_attn)
 
 
+class GLA_model(GlobalLocalAttentionAlign):
+    """Backward compatible wrapper name kept from the original source."""
 
-def get_GLA_model(batchsize):
-    model = GLA_model(batchsize)
-    device = 'cuda'
+    def __init__(self, batchsize: Optional[int] = None, **kwargs) -> None:  # noqa: D401 - signature kept for compatibility
+        # ``batchsize`` is ignored but kept for API compatibility with the
+        # original implementation which relied on a fixed batch size.
+        del batchsize
+        super().__init__(**kwargs)
+
+
+def get_GLA_model(batchsize: Optional[int] = None, **kwargs) -> GLA_model:
+    model = GLA_model(batchsize=batchsize, **kwargs)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     return model
-
-
-if __name__ == '__main__':
-
-
-    model = get_GLA_model(batchsize=4)
-    # #stage 2 3 4
-    # f_t = [torch.randn(4, 4096, 128).cuda(), torch.randn(4, 4096, 128).cuda(), torch.randn(4, 1024, 320).cuda(), torch.randn(4, 1024, 320).cuda(),torch.randn(4, 256, 512).cuda(),torch.randn(4, 256, 512).cuda()]
-    # f_s = [torch.randn(4, 128, 64, 64).cuda(), torch.randn(4, 256, 64, 64).cuda(), torch.randn(4, 512, 64, 64).cuda()]
-
-    #stage 1 2 3 4
-    f_t = [torch.randn(4, 4096, 128).cuda(), torch.randn(4, 1024, 320).cuda(), torch.randn(4, 256, 512).cuda(),torch.randn(4, 16384, 64).cuda()]
-    f_s = [torch.randn(4, 128, 64, 64).cuda(), torch.randn(4, 256, 64, 64).cuda(), torch.randn(4, 512, 64, 64).cuda(),torch.randn(4, 64, 128, 128).cuda()]
-
-    output = model(f_t, f_s)
-    total = sum([param.nelement() for param in model.parameters()])
-    print(total)
-    print("Number of parameter: %.2fM" %(total / 1e6))
-
-    # 输入fs,fc,gt返回cam和处理过的gt

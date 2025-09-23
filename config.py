@@ -171,19 +171,20 @@ class TRAIN:
 class KD:
     ENABLE = True
 
-    ENGINE_NAME = "logit"
+    ENGINE_NAME = "hmkd"
     """
     available engines:
     segtoseg
     logit
     transtocnn_pca_gl
+    hmkd
     """
 
     # 모델 선택
     TEACHER_NAME = 'segformerb5'
     STUDENT_NAME = 'd3p'
     # 이미 학습된 teacher .pth 경로 (없으면 None), KD경로는 일단 colab경로로 해놓음
-    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_segb5\best_model.pth'  # ← 당신 경로로 변경
+    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_LR_segb5\best_model.pth'  # ← 당신 경로로 변경
     # 교사 고정 여부
     FREEZE_TEACHER = True
 
@@ -215,6 +216,21 @@ class KD:
             "pca_v_channels": 128,
             "gl_dropout_p": 0.1,
             "ignore_index": DATA.IGNORE_INDEX
+        },
+        "hmkd": {
+            "w_ce_student": 1.0,
+            "w_gla": 0.5,
+            "w_hfa": 0.5,
+            "ignore_index": DATA.IGNORE_INDEX,
+            "gla_embed_dim": 64,
+            "gla_patch_size": 8,
+            "gla_teacher_stage": 0,  # encoder stage 1
+            "gla_student_stage": 0,  # encoder stage 1
+            "hfa_aligned_channels": 160,
+            "hfa_reduction": 16,
+            "hfa_teacher_stage": -1,  # encoder stage 4
+            "hfa_student_stage": -1,  # encoder stage 4
+            "freeze_teacher": FREEZE_TEACHER,
         }
     }
 
