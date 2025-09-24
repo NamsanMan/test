@@ -29,7 +29,7 @@ else:
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "cross_arch_seg_kd"
+    PROJECT_NAME = "TEMP"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -171,7 +171,7 @@ class TRAIN:
 class KD:
     ENABLE = True
 
-    ENGINE_NAME = "cross_arch_seg_kd"
+    ENGINE_NAME = "hmkd"
     """
     available engines:
     segtoseg
@@ -233,7 +233,7 @@ class KD:
         "hmkd": {
             # 손실 가중치
             "w_ce_student": 1.0,
-            "w_gla": 2.0e3,  # PSAM(=GLA) 어텐션 MSE. 처음 0.05~0.2로 탐색 권장
+            "w_gla": 1.0e4,  # PSAM(=GLA) 어텐션 MSE. 처음 0.05~0.2로 탐색 권장
             "w_hfa": 1.0,  # HSAM(HFA) 재구성 MSE. 0.5~2.0 범위 탐색
 
             "ignore_index": DATA.IGNORE_INDEX,

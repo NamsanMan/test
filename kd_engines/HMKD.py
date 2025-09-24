@@ -6,15 +6,14 @@ from typing import Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .base_engine import BaseKDEngine
-from .psam_align import PSAMAlign            # <-- 수정: 올바른 클래스 임포트
+from .psam_align import PSAMAlign
 from .hsam_hfa import HeterogeneousFeatureAlignLoss
 
 
 class HMKD(BaseKDEngine):
-    """Knowledge distillation engine using both PSAM (GLA) and HSAM (HFA)."""
-
     def __init__(
         self,
         teacher: nn.Module,
@@ -23,19 +22,16 @@ class HMKD(BaseKDEngine):
         w_gla: float,
         w_hfa: float,
         ignore_index: int,
-        # PSAM(=GLA)
         gla_embed_dim: int = 64,
         gla_patch_size: int = 8,
         gla_stride: Optional[int] = None,
         gla_teacher_stage: int = 0,
         gla_student_stage: int = 0,
-        # HSAM(HFA)
         hfa_aligned_channels: int = 160,
         hfa_offset_scale: float = 2.0,
         hfa_align_corners: bool = True,
         hfa_teacher_stage: int = -1,
         hfa_student_stage: int = -1,
-        # misc
         freeze_teacher: bool = True,
     ) -> None:
         super().__init__(teacher, student)
@@ -46,14 +42,12 @@ class HMKD(BaseKDEngine):
         self.ignore_index = int(ignore_index)
         self._freeze_teacher = bool(freeze_teacher)
 
-        # PSAM 설정
         self.gla_embed_dim = int(gla_embed_dim)
         self.gla_patch_size = int(gla_patch_size)
         self.gla_stride = gla_stride
         self.gla_teacher_stage = int(gla_teacher_stage)
         self.gla_student_stage = int(gla_student_stage)
 
-        # HSAM 설정
         self.hfa_aligned_channels = int(hfa_aligned_channels)
         self.hfa_offset_scale = float(hfa_offset_scale)
         self.hfa_align_corners = bool(hfa_align_corners)
@@ -73,16 +67,10 @@ class HMKD(BaseKDEngine):
     def train(self, mode: bool = True):  # type: ignore[override]
         super().train(mode)
         if self._freeze_teacher:
-            # KD에서 teacher는 항상 eval 모드 유지
             self.teacher.eval()
         return self
 
-    # --- 내부 유틸 ---
     def _forward_with_feats(self, model: nn.Module, imgs: torch.Tensor) -> Tuple[torch.Tensor, Tuple[torch.Tensor, ...]]:
-        """
-        모델이 (logits, feats) 또는 dict(logits, feats) 또는 transformers 출력일 때 대응.
-        feats는 최근 4개 블록 등을 튜플로 반환.
-        """
         try:
             out = model(imgs, return_feats=True)
             if isinstance(out, tuple) and len(out) == 2:
@@ -91,15 +79,11 @@ class HMKD(BaseKDEngine):
                 logits, feats = out["logits"], out["feats"]
             else:
                 logits, feats = out  # type: ignore[misc]
-            if isinstance(feats, torch.Tensor):
-                feats = (feats,)
-            else:
-                feats = tuple(feats)
+            feats = (feats,) if isinstance(feats, torch.Tensor) else tuple(feats)
             return logits, feats
         except TypeError:
             pass
 
-        # HuggingFace/transformers 호환
         if hasattr(model, "config"):
             if hasattr(model.config, "output_hidden_states") and not model.config.output_hidden_states:
                 model.config.output_hidden_states = True
@@ -126,7 +110,7 @@ class HMKD(BaseKDEngine):
 
     def _ensure_gla_module(self, device: torch.device) -> None:
         if self.gla_module is None:
-            self.gla_module = PSAMAlign(  # <-- 수정: PSAMAlign 사용
+            self.gla_module = PSAMAlign(
                 embed_dim=self.gla_embed_dim,
                 patch_size=self.gla_patch_size,
                 stride=self.gla_stride,
@@ -140,7 +124,6 @@ class HMKD(BaseKDEngine):
                 align_corners=self.hfa_align_corners,
             ).to(device)
 
-    # --- 손실 계산 ---
     def compute_losses(self, imgs: torch.Tensor, masks: torch.Tensor, device: torch.device):
         s_logits, s_feats = self._forward_with_feats(self.student, imgs)
 
@@ -153,26 +136,32 @@ class HMKD(BaseKDEngine):
         s_feats = tuple(s_feats)
         t_feats = tuple(t_feats)
 
-        # CE(student vs GT)
+        # --- CE (void 무시: ignore_index) ---
         ce_student = self.ce_loss(s_logits, masks)
 
-        # PSAM(GLA)
+        # binary valid mask: True=유효, False=void
+        valid_full = (masks != self.ignore_index).float()   # (B,H,W)
+
+        # --- PSAM(GLA) ---
         gla_loss = s_logits.new_tensor(0.0)
         if self.w_gla > 0.0:
-            s_stage = self._select_feat(s_feats, self.gla_student_stage)
+            s_stage = self._select_feat(s_feats, self.gla_student_stage)   # (B,Cs,Hs,Ws)
             t_stage = self._select_feat(t_feats, self.gla_teacher_stage).detach()
             self._ensure_gla_module(s_stage.device)
             assert self.gla_module is not None
-            gla_loss = self.gla_module(t_stage, s_stage)
+            # 학생 스테이지 해상도에 맞춰 valid mask 리사이즈 (nearest)
+            valid_s = F.interpolate(valid_full.unsqueeze(1), size=s_stage.shape[-2:], mode="nearest").squeeze(1)
+            gla_loss = self.gla_module(t_stage, s_stage, valid_mask=valid_s)
 
-        # HSAM(HFA)
+        # --- HSAM(HFA) ---
         hfa_loss = s_logits.new_tensor(0.0)
         if self.w_hfa > 0.0:
             s_stage = self._select_feat(s_feats, self.hfa_student_stage)
             t_stage = self._select_feat(t_feats, self.hfa_teacher_stage).detach()
             self._ensure_hfa_module(s_stage.device)
             assert self.hfa_module is not None
-            hfa_loss = self.hfa_module(t_stage, s_stage)
+            valid_s = F.interpolate(valid_full.unsqueeze(1), size=s_stage.shape[-2:], mode="nearest").squeeze(1)
+            hfa_loss = self.hfa_module(t_stage, s_stage, valid_mask=valid_s)
 
         total = self.w_ce_student * ce_student + self.w_gla * gla_loss + self.w_hfa * hfa_loss
 
@@ -184,7 +173,6 @@ class HMKD(BaseKDEngine):
             "s_logits": s_logits,
         }
 
-    # 옵티마이저에 태울 추가 파라미터(학생 측 PSAM + HFA 모듈 파라미터)
     def get_extra_parameters(self):
         params = []
         if self.gla_module is not None:
