@@ -186,15 +186,9 @@ class KD:
     # 이미 학습된 teacher .pth 경로 (없으면 None), KD경로는 일단 colab경로로 해놓음
     if IS_COLAB:
         # --- Colab 환경일 때의 경로 ---
-        print("▶ colab checkpoint loaded.")
-
         TEACHER_CKPT = '/content/drive/MyDrive/LAB/result_files/test_results/Bset_LR_segb5/best_model.pth'
 
-    else:
-        # --- 로컬 환경일 때의 경로 ---
-        print("▶ local checkpoint loaded.")
-
-        # 기존에 사용하시던 로컬 경로 설정
+    else:        # 기존에 사용하시던 로컬 경로 설정
         TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_LR_segb5\best_model.pth'
 
     # 교사 고정 여부

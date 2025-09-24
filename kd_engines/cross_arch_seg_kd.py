@@ -366,6 +366,14 @@ class CrossArchSegKD(BaseKDEngine):
         # 학생에 변환 입력 통과
         _s_logits_tr, s_feat_tr = self._get_last_encoder_feat(self.student, imgs_tr, is_teacher=False)
 
+        # === [FIX] 학생 feature를 teacher feature space로 매핑 ===
+        if hasattr(self, "gl_proj_s") and not isinstance(self.gl_proj_s, nn.Identity):
+            s_feat_tr = self.gl_proj_s(s_feat_tr)
+            if s_feat_tr.shape[-2:] != t_feat_last.shape[-2:]:
+                s_feat_tr = F.interpolate(
+                    s_feat_tr, size=t_feat_last.shape[-2:], mode="bilinear", align_corners=False
+                )
+
         # Discriminator 학습 손실 (real: h_T, fake: h'_S)
         real = t_feat_last.detach()
         fake = s_feat_tr.detach()
@@ -374,11 +382,11 @@ class CrossArchSegKD(BaseKDEngine):
         l_mad = self.bce(pred_real, torch.ones_like(pred_real)) + \
                 self.bce(pred_fake, torch.zeros_like(pred_fake))
 
-        # Generator(학생) 손실: log(1 - D(h'_S)) 최소화
+        # Generator(학생) 손실
         self._set_requires_grad(self.disc, False)
-        pred_fake_for_g = self.disc(s_feat_tr)  # 학생으로만 gradient
+        pred_fake_for_g = self.disc(s_feat_tr)  # 학생에만 gradient
         l_mvg = torch.mean(torch.log(1.0 - pred_fake_for_g + 1e-6)) * (-1.0)
-        # 비포화 형태로 바꾸고 싶다면:
+        # 비포화 형태(Non-saturating GAN)로 바꾸려면 아래 한 줄 사용 가능:
         # l_mvg = self.bce(pred_fake_for_g, torch.ones_like(pred_fake_for_g))
         self._set_requires_grad(self.disc, True)
 
