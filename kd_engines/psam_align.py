@@ -126,7 +126,8 @@ class PSAMAlign(nn.Module):
             sa_t = self.teacher_qk(t_tokens)         # (B, N, N)
 
         # (5) Loss = MSE(sa_t, sa_s)
-        loss = F.mse_loss(sa_s, sa_t)
+        N = sa_s.size(1)
+        loss = F.mse_loss(sa_s, sa_t, reduction='sum') / N  # ≈ mean * N
         return loss
 
     # ---- 옵티마이저에 학생 파라미터만 노출 ----

@@ -160,14 +160,37 @@ def _mvg_trans_single(img: torch.Tensor) -> torch.Tensor:
     return x
 
 
-def mvg_augment(batch: torch.Tensor) -> torch.Tensor:
+
+def mvg_augment(batch: torch.Tensor, target_size: Tuple[int, int] | None = None) -> torch.Tensor:
     """
-    batch: (B,3,H,W). 정규화 전/후 모두 허용(상대 변화만 적용).
+    Multi-View Generator (MVG)
+    - batch: (B, 3, H, W)
+    - target_size: 최종 크기 (H, W). None이면 입력의 (H, W)를 사용.
+    - 모든 샘플을 동일 크기로 강제 resize하여 torch.stack 실패를 방지.
     """
+    if batch.ndim != 4 or batch.shape[1] != 3:
+        raise ValueError(f"mvg_augment expects shape (B,3,H,W), got {tuple(batch.shape)}")
+
+    B, C, H, W = batch.shape
+    if target_size is None:
+        target_size = (H, W)
+
     out = []
-    for n in range(batch.shape[0]):
-        out.append(_mvg_trans_single(batch[n]))
-    return torch.stack(out, dim=0)
+    # 내부 변환은 float32로 처리(수치 안정), 마지막에 원래 dtype으로 복원
+    in_dtype = batch.dtype
+    for n in range(B):
+        x = batch[n].to(torch.float32)
+        x = _mvg_trans_single(x)  # 확률 0.5로 강한 변환
+
+        # 변환으로 크기가 달라질 수 있으므로 강제 resize
+        if x.shape[1:] != target_size:
+            x = F.interpolate(
+                x.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
+            ).squeeze(0)
+
+        out.append(x)
+
+    return torch.stack(out, dim=0).to(in_dtype)
 
 
 # ----------------------------
@@ -337,7 +360,8 @@ class CrossArchSegKD(BaseKDEngine):
 
         # MVG 변환 이미지 생성
         with torch.no_grad():
-            imgs_tr = mvg_augment(imgs.detach().cpu()).to(imgs.device, imgs.dtype)
+            imgs_tr = mvg_augment(imgs.detach().cpu(), target_size=imgs.shape[-2:]) \
+                        .to(imgs.device, imgs.dtype)
 
         # 학생에 변환 입력 통과
         _s_logits_tr, s_feat_tr = self._get_last_encoder_feat(self.student, imgs_tr, is_teacher=False)

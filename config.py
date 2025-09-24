@@ -21,7 +21,7 @@ else:
     print("▶ Running in local environment.")
 
     # 기존에 사용하시던 로컬 경로 설정
-    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_v4\B_set")
+    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\B_set")
     BASE_DIR = Path(r"E:\LAB\result_files\test_results")
 
 # ──────────────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ else:
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "TEMP2"
+    PROJECT_NAME = "TEMP"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -171,7 +171,7 @@ class TRAIN:
 class KD:
     ENABLE = True
 
-    ENGINE_NAME = "cross_arch_seg_kd"
+    ENGINE_NAME = "hmkd"
     """
     available engines:
     segtoseg
@@ -184,7 +184,7 @@ class KD:
     TEACHER_NAME = 'segformerb5'
     STUDENT_NAME = 'd3p'
     # 이미 학습된 teacher .pth 경로 (없으면 None), KD경로는 일단 colab경로로 해놓음
-    TEACHER_CKPT = '/content/drive/MyDrive/LAB/result_files/test_results/Bset_segb5/best_model.pth'  # ← 당신 경로로 변경
+    TEACHER_CKPT = '/content/drive/MyDrive/LAB/result_files/test_results/Bset_LR_segb5/best_model.pth'  # ← 당신 경로로 변경
     # 교사 고정 여부
     FREEZE_TEACHER = True
 
@@ -227,8 +227,8 @@ class KD:
         "hmkd": {
             # 손실 가중치
             "w_ce_student": 1.0,
-            "w_gla": 4.0e5,  # PSAM(=GLA) 어텐션 MSE. 처음 0.05~0.2로 탐색 권장
-            "w_hfa": 0.7,  # HSAM(HFA) 재구성 MSE. 0.5~2.0 범위 탐색
+            "w_gla": 2.0e3,  # PSAM(=GLA) 어텐션 MSE. 처음 0.05~0.2로 탐색 권장
+            "w_hfa": 1.0,  # HSAM(HFA) 재구성 MSE. 0.5~2.0 범위 탐색
 
             "ignore_index": DATA.IGNORE_INDEX,
 
