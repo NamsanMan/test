@@ -40,3 +40,10 @@ heterogeneous KD의 SOTA 중 하나인 PCA및 GL method를 추가함
 v250919
 KD시에는 스케쥴러 RoP 별로 안좋은 것 같아서 CosineAnnealingLR로 바꿈
 HR teacher와 LW student KD 실험 시작해보려고 함
+
+v250924
+알수없는 index 오류로 KD는 물론 standalone model도 갑자기 training이 안되는 문제발생
+>>일단 dataloader단에서 train augmentation은 사용안하기로 함
+>>일단 stand alone model들은 다시 정상적으로 훈련되는것으로 보임
+>>성능이 하락했지만 어쩔수없이 사용하기로 해야될듯
+ignore index를 kd에서 어떻게 처리하는지 자세하게분석해봐야됨

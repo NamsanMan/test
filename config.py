@@ -29,7 +29,7 @@ else:
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "new_Bset_LR_seg5"
+    PROJECT_NAME = "NEW"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
