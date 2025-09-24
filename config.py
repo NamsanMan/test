@@ -13,7 +13,7 @@ if IS_COLAB:
     # Colab의 구글 드라이브 경로를 기본 경로로 설정
     BASE_DRIVE_DIR = Path('/content/drive/MyDrive/LAB')
 
-    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/A_set"
+    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/B_set"
     BASE_DIR = BASE_DRIVE_DIR / "result_files/test_results"
 
 else:
@@ -29,7 +29,7 @@ else:
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "TEMP"
+    PROJECT_NAME = "new_Bset_LR_seg5"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -96,7 +96,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'd3p'
+    NAME = 'segformerb5'
 
     """
     available models:

@@ -153,7 +153,7 @@ def run_training(num_epochs):
         if epoch <= config.TRAIN.WARMUP_EPOCHS:
             warmup.step()
         else:
-            scheduler.step(vl_loss)
+            scheduler.step()
 
         metrics = evaluate.evaluate_all(model, data_loader.val_loader, device)
         miou = metrics["mIoU"]
