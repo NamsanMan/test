@@ -1,4 +1,5 @@
-"""KD engine that combines GLA and HFA feature alignment losses."""
+# kd_engines/glahfa_kd.py
+"""KD engine that combines PSAM (GLA) and HSAM(HFA) losses."""
 from __future__ import annotations
 
 from typing import Optional, Sequence, Tuple
@@ -7,12 +8,12 @@ import torch
 import torch.nn as nn
 
 from .base_engine import BaseKDEngine
-from .GLA_model import GlobalLocalAttentionAlign
-from .HFA_model import HeterogeneousFeatureAlignLoss
+from .psam_align import PSAMAlign            # <-- 수정: 올바른 클래스 임포트
+from .hsam_hfa import HeterogeneousFeatureAlignLoss
 
 
-class GLAHFAKD(BaseKDEngine):
-    """Knowledge distillation engine using both GLA and HFA losses."""
+class HMKD(BaseKDEngine):
+    """Knowledge distillation engine using both PSAM (GLA) and HSAM (HFA)."""
 
     def __init__(
         self,
@@ -22,15 +23,19 @@ class GLAHFAKD(BaseKDEngine):
         w_gla: float,
         w_hfa: float,
         ignore_index: int,
+        # PSAM(=GLA)
         gla_embed_dim: int = 64,
         gla_patch_size: int = 8,
         gla_stride: Optional[int] = None,
         gla_teacher_stage: int = 0,
         gla_student_stage: int = 0,
+        # HSAM(HFA)
         hfa_aligned_channels: int = 160,
-        hfa_reduction: int = 16,
+        hfa_offset_scale: float = 2.0,
+        hfa_align_corners: bool = True,
         hfa_teacher_stage: int = -1,
         hfa_student_stage: int = -1,
+        # misc
         freeze_teacher: bool = True,
     ) -> None:
         super().__init__(teacher, student)
@@ -41,20 +46,23 @@ class GLAHFAKD(BaseKDEngine):
         self.ignore_index = int(ignore_index)
         self._freeze_teacher = bool(freeze_teacher)
 
+        # PSAM 설정
         self.gla_embed_dim = int(gla_embed_dim)
         self.gla_patch_size = int(gla_patch_size)
         self.gla_stride = gla_stride
         self.gla_teacher_stage = int(gla_teacher_stage)
         self.gla_student_stage = int(gla_student_stage)
 
+        # HSAM 설정
         self.hfa_aligned_channels = int(hfa_aligned_channels)
-        self.hfa_reduction = int(hfa_reduction)
+        self.hfa_offset_scale = float(hfa_offset_scale)
+        self.hfa_align_corners = bool(hfa_align_corners)
         self.hfa_teacher_stage = int(hfa_teacher_stage)
         self.hfa_student_stage = int(hfa_student_stage)
 
         self.ce_loss = nn.CrossEntropyLoss(ignore_index=self.ignore_index)
 
-        self.gla_module: Optional[GlobalLocalAttentionAlign] = None
+        self.gla_module: Optional[PSAMAlign] = None
         self.hfa_module: Optional[HeterogeneousFeatureAlignLoss] = None
 
         if self._freeze_teacher:
@@ -65,10 +73,16 @@ class GLAHFAKD(BaseKDEngine):
     def train(self, mode: bool = True):  # type: ignore[override]
         super().train(mode)
         if self._freeze_teacher:
+            # KD에서 teacher는 항상 eval 모드 유지
             self.teacher.eval()
         return self
 
+    # --- 내부 유틸 ---
     def _forward_with_feats(self, model: nn.Module, imgs: torch.Tensor) -> Tuple[torch.Tensor, Tuple[torch.Tensor, ...]]:
+        """
+        모델이 (logits, feats) 또는 dict(logits, feats) 또는 transformers 출력일 때 대응.
+        feats는 최근 4개 블록 등을 튜플로 반환.
+        """
         try:
             out = model(imgs, return_feats=True)
             if isinstance(out, tuple) and len(out) == 2:
@@ -85,6 +99,7 @@ class GLAHFAKD(BaseKDEngine):
         except TypeError:
             pass
 
+        # HuggingFace/transformers 호환
         if hasattr(model, "config"):
             if hasattr(model.config, "output_hidden_states") and not model.config.output_hidden_states:
                 model.config.output_hidden_states = True
@@ -111,7 +126,7 @@ class GLAHFAKD(BaseKDEngine):
 
     def _ensure_gla_module(self, device: torch.device) -> None:
         if self.gla_module is None:
-            self.gla_module = GlobalLocalAttentionAlign(
+            self.gla_module = PSAMAlign(  # <-- 수정: PSAMAlign 사용
                 embed_dim=self.gla_embed_dim,
                 patch_size=self.gla_patch_size,
                 stride=self.gla_stride,
@@ -121,9 +136,11 @@ class GLAHFAKD(BaseKDEngine):
         if self.hfa_module is None:
             self.hfa_module = HeterogeneousFeatureAlignLoss(
                 aligned_channels=self.hfa_aligned_channels,
-                reduction=self.hfa_reduction,
+                offset_scale=self.hfa_offset_scale,
+                align_corners=self.hfa_align_corners,
             ).to(device)
 
+    # --- 손실 계산 ---
     def compute_losses(self, imgs: torch.Tensor, masks: torch.Tensor, device: torch.device):
         s_logits, s_feats = self._forward_with_feats(self.student, imgs)
 
@@ -136,8 +153,10 @@ class GLAHFAKD(BaseKDEngine):
         s_feats = tuple(s_feats)
         t_feats = tuple(t_feats)
 
+        # CE(student vs GT)
         ce_student = self.ce_loss(s_logits, masks)
 
+        # PSAM(GLA)
         gla_loss = s_logits.new_tensor(0.0)
         if self.w_gla > 0.0:
             s_stage = self._select_feat(s_feats, self.gla_student_stage)
@@ -146,6 +165,7 @@ class GLAHFAKD(BaseKDEngine):
             assert self.gla_module is not None
             gla_loss = self.gla_module(t_stage, s_stage)
 
+        # HSAM(HFA)
         hfa_loss = s_logits.new_tensor(0.0)
         if self.w_hfa > 0.0:
             s_stage = self._select_feat(s_feats, self.hfa_student_stage)
@@ -164,10 +184,11 @@ class GLAHFAKD(BaseKDEngine):
             "s_logits": s_logits,
         }
 
+    # 옵티마이저에 태울 추가 파라미터(학생 측 PSAM + HFA 모듈 파라미터)
     def get_extra_parameters(self):
         params = []
         if self.gla_module is not None:
-            params.extend(self.gla_module.parameters())
+            params.extend(self.gla_module.student_parameters())
         if self.hfa_module is not None:
             params.extend(self.hfa_module.parameters())
         return params

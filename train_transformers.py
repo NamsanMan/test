@@ -28,8 +28,8 @@ criterion = loss_class(**config.TRAIN.LOSS_FN["PARAMS"])
 optimizer_class = getattr(optim, config.TRAIN.OPTIMIZER["NAME"])
 optimizer = optimizer_class(model.parameters(), **config.TRAIN.OPTIMIZER["PARAMS"])
 # scheduler
-scheduler_class = getattr(optim.lr_scheduler, config.TRAIN.SCHEDULER_RoP["NAME"])
-scheduler = scheduler_class(optimizer, **config.TRAIN.SCHEDULER_RoP["PARAMS"])
+scheduler_class = getattr(optim.lr_scheduler, config.TRAIN.SCHEDULER_CALR["NAME"])
+scheduler = scheduler_class(optimizer, **config.TRAIN.SCHEDULER_CALR["PARAMS"])
 # warm-up
 if config.TRAIN.USE_WARMUP:
     warmup_class = getattr(optim.lr_scheduler, config.TRAIN.WARMUP_SCHEDULER["NAME"])

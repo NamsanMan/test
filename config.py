@@ -21,7 +21,7 @@ else:
     print("▶ Running in local environment.")
 
     # 기존에 사용하시던 로컬 경로 설정
-    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\B_set")
+    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_v4\B_set")
     BASE_DIR = Path(r"E:\LAB\result_files\test_results")
 
 # ──────────────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ else:
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "TEMP"
+    PROJECT_NAME = "TEMP2"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -171,12 +171,12 @@ class TRAIN:
 class KD:
     ENABLE = True
 
-    ENGINE_NAME = "hmkd"
+    ENGINE_NAME = "cross_arch_seg_kd"
     """
     available engines:
     segtoseg
     logit
-    transtocnn_pca_gl
+    cross_arch_seg_kd
     hmkd
     """
 
@@ -184,7 +184,7 @@ class KD:
     TEACHER_NAME = 'segformerb5'
     STUDENT_NAME = 'd3p'
     # 이미 학습된 teacher .pth 경로 (없으면 None), KD경로는 일단 colab경로로 해놓음
-    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_LR_segb5\best_model.pth'  # ← 당신 경로로 변경
+    TEACHER_CKPT = '/content/drive/MyDrive/LAB/result_files/test_results/Bset_segb5/best_model.pth'  # ← 당신 경로로 변경
     # 교사 고정 여부
     FREEZE_TEACHER = True
 
@@ -208,29 +208,44 @@ class KD:
             "ignore_index": DATA.IGNORE_INDEX,
             "freeze_teacher": FREEZE_TEACHER
         },
-        "transtocnn_pca_gl": {
+        "cross_arch_seg_kd": {
             "w_ce_student": 1.0,
             "w_pca": 0.1,
             "w_gl": 0.1,
             "pca_qk_channels": 64,
             "pca_v_channels": 128,
             "gl_dropout_p": 0.1,
-            "ignore_index": DATA.IGNORE_INDEX
+            "ignore_index": DATA.IGNORE_INDEX,
+            # === Cross-view robust training (MVG + MAD) ===
+            "w_mad": 0.5,  # Discriminator loss weight (식 (8))
+            "w_mvg": 0.5,  # Student(generator) loss weight (식 (9))
+            "disc_hidden": (256, 64),  # D의 3층 MLP 숨은 차원
+
+            # 교사 고정 여부(엔진 쪽으로 전달)
+            "freeze_teacher": FREEZE_TEACHER
         },
         "hmkd": {
+            # 손실 가중치
             "w_ce_student": 1.0,
-            "w_gla": 0.5,
-            "w_hfa": 0.5,
+            "w_gla": 4.0e5,  # PSAM(=GLA) 어텐션 MSE. 처음 0.05~0.2로 탐색 권장
+            "w_hfa": 0.7,  # HSAM(HFA) 재구성 MSE. 0.5~2.0 범위 탐색
+
             "ignore_index": DATA.IGNORE_INDEX,
-            "gla_embed_dim": 64,
-            "gla_patch_size": 8,
-            "gla_teacher_stage": 0,  # encoder stage 1
-            "gla_student_stage": 0,  # encoder stage 1
-            "hfa_aligned_channels": 160,
-            "hfa_reduction": 16,
-            "hfa_teacher_stage": -1,  # encoder stage 4
-            "hfa_student_stage": -1,  # encoder stage 4
-            "freeze_teacher": FREEZE_TEACHER,
+
+            # PSAM(=GLA)
+            "gla_embed_dim": 64,  # 패치 임베딩 차원
+            "gla_patch_size": 8,  # patch size (stride 기본값도 8)
+            "gla_teacher_stage": 0,  # SegFormer 인코더 stage 1 (0~3)
+            "gla_student_stage": 0,  # 학생 인코더 대응 스테이지
+
+            # HSAM(HFA)
+            "hfa_aligned_channels": 160,  # proj 채널
+            "hfa_offset_scale": 2.0,  # 오프셋 최대 픽셀 (±2)
+            "hfa_align_corners": True,  # interpolate/grid_sample 일관 옵션
+            "hfa_teacher_stage": -2,  # "-1"로 설정시 segformer MiT encoder의 stage 4
+            "hfa_student_stage": -2,  # "-1"로 설정시 mobilenetV2의 stage 5
+
+            "freeze_teacher": FREEZE_TEACHER
         }
     }
 
