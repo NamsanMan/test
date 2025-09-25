@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from sklearn.metrics import confusion_matrix
 
-import config
+from config import DATA
 
 @torch.inference_mode()
 def evaluate_all(model, loader, device):
@@ -23,7 +23,7 @@ def evaluate_all(model, loader, device):
     masks_np = np.concatenate([m.flatten() for m in all_masks])
 
     # 유효한 픽셀만 필터링
-    valid = masks_np != config.DATA.IGNORE_INDEX
+    valid = masks_np != DATA.IGNORE_INDEX
     preds_np = preds_np[valid]
     masks_np = masks_np[valid]
 
@@ -33,21 +33,21 @@ def evaluate_all(model, loader, device):
     pa = (np.sum(preds_np == masks_np) / den) if den > 0 else 0.0
 
     # 2. Confusion Matrix
-    cm = confusion_matrix(masks_np, preds_np, labels=list(range(config.DATA.NUM_CLASSES)))
+    cm = confusion_matrix(masks_np, preds_np, labels=list(range(DATA.NUM_CLASSES)))
 
     # 3. mIoU 및 Per-class IoU
     intersection = np.diag(cm)
     union = np.sum(cm, axis=1) + np.sum(cm, axis=0) - np.diag(cm)
 
     # ignore_index 제외
-    iou = np.zeros(config.DATA.NUM_CLASSES, dtype=np.float64)
+    iou = np.zeros(DATA.NUM_CLASSES, dtype=np.float64)
     np.divide(intersection, union, out=iou, where=(union > 0))
-    valid_classes_iou = [iou[c] for c in range(config.DATA.NUM_CLASSES) if c != config.DATA.IGNORE_INDEX and union[c] > 0]
+    valid_classes_iou = [iou[c] for c in range(DATA.NUM_CLASSES) if c != DATA.IGNORE_INDEX and union[c] > 0]
     miou = np.nanmean(valid_classes_iou)
 
-    per_class_iou = np.full(config.DATA.NUM_CLASSES, np.nan)
-    for c in range(config.DATA.NUM_CLASSES):
-        if c != config.DATA.IGNORE_INDEX and union[c] > 0:
+    per_class_iou = np.full(DATA.NUM_CLASSES, np.nan)
+    for c in range(DATA.NUM_CLASSES):
+        if c != DATA.IGNORE_INDEX and union[c] > 0:
             per_class_iou[c] = iou[c]
 
     return {

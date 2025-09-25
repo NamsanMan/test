@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
-import config
+from config import DATA
 
 _SOURCES = {
     "segformerb0": "nvidia/mit-b0",
@@ -13,7 +13,7 @@ _SOURCES = {
 }
 
 class SegFormerWrapper(nn.Module):
-    def __init__(self, name: str, num_classes: int = config.DATA.NUM_CLASSES):
+    def __init__(self, name: str, num_classes: int = DATA.NUM_CLASSES):
         super().__init__()
         name = name.lower()
         assert name in _SOURCES, f"Unknown SegFormer name: {name}"
@@ -21,8 +21,8 @@ class SegFormerWrapper(nn.Module):
 
         cfg = SegformerConfig.from_pretrained(src)
         cfg.num_labels = num_classes
-        cfg.id2label = {i: n for i, n in enumerate(config.DATA.CLASS_NAMES)}
-        cfg.label2id = {n: i for i, n in enumerate(config.DATA.CLASS_NAMES)}
+        cfg.id2label = {i: n for i, n in enumerate(DATA.CLASS_NAMES)}
+        cfg.label2id = {n: i for i, n in enumerate(DATA.CLASS_NAMES)}
         cfg.output_hidden_states = True  # 항상 stage feats 반환한다 >> KD시 필요
 
         self.model = SegformerForSemanticSegmentation.from_pretrained(

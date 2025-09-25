@@ -6,10 +6,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import segmentation_models_pytorch as smp
 
+from config import DATA
+
 DEFAULT_ENCODER_NAME     = "mobilenet_v2"
 DEFAULT_ENCODER_WEIGHTS  = "imagenet"
 DEFAULT_IN_CHANNELS      = 3
-DEFAULT_NUM_CLASSES      = 12
+DEFAULT_NUM_CLASSES      = DATA.NUM_CLASSES
 DEFAULT_STAGE_INDICES: Tuple[int, ...] = (1, 2, 3, 4)
 
 # === 새로 추가: 내부 패딩 설정 ===

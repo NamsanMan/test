@@ -64,7 +64,7 @@ model = student
 
 if config.KD.FREEZE_TEACHER:
     try:
-        ckpt_path = Path(config.KD.TEACHER_CKPT)
+        ckpt_path = Path(config.TEACHER_CKPT)
         if ckpt_path.exists():
             ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
             # Teacher 체크포인트가 'model_state' 키를 가지고 있는지 확인하고 로드
@@ -213,7 +213,7 @@ def write_summary(init=False, best_epoch=None, best_miou=None):
         f.write(f"Batch size    : {config.DATA.BATCH_SIZE}\n\n")
         f.write("=== Knowledge Distillation Configuration ===\n")
         f.write(f"Engine NAME        : {config.KD.ENGINE_NAME}\n")
-        f.write(f"Teacher Source CKPT: {config.KD.TEACHER_CKPT}\n\n")
+        f.write(f"Teacher Source CKPT: {config.TEACHER_CKPT}\n\n")
         # 1. 현재 설정된 엔진의 파라미터 딕셔너리를 가져옵니다.
         engine_name = config.KD.ENGINE_NAME
         current_engine_params = config.KD.ALL_ENGINE_PARAMS.get(engine_name, {})

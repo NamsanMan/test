@@ -13,23 +13,29 @@ if IS_COLAB:
     # Colab의 구글 드라이브 경로를 기본 경로로 설정
     BASE_DRIVE_DIR = Path('/content/drive/MyDrive/LAB')
 
-    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/B_set"
+    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/A_set"
     BASE_DIR = BASE_DRIVE_DIR / "result_files/test_results"
+
+    # KD용 weight load
+    TEACHER_CKPT = BASE_DRIVE_DIR / 'result_files/test_results/Bset_LR_segb5/best_model.pth'
 
 else:
     # --- 로컬 환경일 때의 경로 ---
     print("▶ Running in local environment.")
 
     # 기존에 사용하시던 로컬 경로 설정
-    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\B_set")
+    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\A_set")
     BASE_DIR = Path(r"E:\LAB\result_files\test_results")
+
+    # KD용 weight load
+    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_LR_segb5\best_model.pth'
 
 # ──────────────────────────────────────────────────────────────────
 # 1. GENERAL: 프로젝트 전반 및 실험 관리 설정
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "NEW"
+    PROJECT_NAME = "Aset_LR_seg5_new"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -70,9 +76,9 @@ class DATA:
     CLASS_NAMES = [
         "Sky", "Building", "Pole", "Road", "Sidewalk",
         "Tree", "SignSymbol", "Fence", "Car",
-        "Pedestrian", "Bicyclist", "Void"
+        "Pedestrian", "Bicyclist"
     ]
-    NUM_CLASSES = len(CLASS_NAMES) # =12
+    NUM_CLASSES = len(CLASS_NAMES) # =11
     IGNORE_INDEX = 11  # 'Void' 클래스의 인덱스
 
     # grayscale label(ground truth 포함)을 공식 컬러 매핑과 동일하게 시각화를 위해 컬러 매핑
@@ -96,7 +102,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'segformerb5'
+    NAME = 'd3p'
 
     """
     available models:
@@ -151,7 +157,7 @@ class TRAIN:
     LOSS_FN = {
         "NAME": "CrossEntropyLoss",
         "PARAMS": {
-            "ignore_index": 11
+            "ignore_index": DATA.IGNORE_INDEX
         }
     }
 
@@ -184,12 +190,6 @@ class KD:
     TEACHER_NAME = 'segformerb5'
     STUDENT_NAME = 'd3p'
     # 이미 학습된 teacher .pth 경로 (없으면 None), KD경로는 일단 colab경로로 해놓음
-    if IS_COLAB:
-        # --- Colab 환경일 때의 경로 ---
-        TEACHER_CKPT = '/content/drive/MyDrive/LAB/result_files/test_results/Bset_LR_segb5/best_model.pth'
-
-    else:        # 기존에 사용하시던 로컬 경로 설정
-        TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_LR_segb5\best_model.pth'
 
     # 교사 고정 여부
     FREEZE_TEACHER = True

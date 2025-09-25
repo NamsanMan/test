@@ -5,11 +5,13 @@ import torch
 import torch.nn as nn
 import segmentation_models_pytorch as smp
 
+from config import DATA
+
 # --- 기본 설정값 (DeepLabV3+ 코드와 동일한 형식 유지) ---
 DEFAULT_ENCODER_NAME = "resnet34"  # U-Net에서 자주 사용되는 인코더로 변경
 DEFAULT_ENCODER_WEIGHTS = "imagenet"
 DEFAULT_IN_CHANNELS = 3
-DEFAULT_NUM_CLASSES = 12
+DEFAULT_NUM_CLASSES = DATA.NUM_CLASSES
 # U-Net 인코더에서 추출할 중간 특징의 스테이지 인덱스
 # smp U-Net의 경우, 0=입력, 1=stage1, 2=stage2, ..., 5=bottleneck
 DEFAULT_STAGE_INDICES: Tuple[int, ...] = (1, 2, 3, 4, 5)

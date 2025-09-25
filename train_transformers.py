@@ -153,6 +153,9 @@ def run_training(num_epochs):
         if epoch <= config.TRAIN.WARMUP_EPOCHS:
             warmup.step()
         else:
+            # RoP를 사용하는 경우
+            #scheduler.step(vl_loss)
+            # 일반적인 경우
             scheduler.step()
 
         metrics = evaluate.evaluate_all(model, data_loader.val_loader, device)

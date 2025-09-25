@@ -136,7 +136,7 @@ train_dataset = CamVidDataset(
     images_dir = config.DATA.TRAIN_IMG_DIR,
     masks_dir  = config.DATA.TRAIN_LABEL_DIR,
     file_list = config.DATA.FILE_LIST,
-    transform =SegmentationTransform(config.DATA.INPUT_RESOLUTION)
+    transform =TrainAugmentation(config.DATA.INPUT_RESOLUTION)
 )
 
 val_dataset = CamVidDataset(
