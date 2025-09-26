@@ -17,7 +17,7 @@ if IS_COLAB:
     BASE_DIR = BASE_DRIVE_DIR / "result_files/test_results"
 
     # KD용 weight load
-    TEACHER_CKPT = BASE_DRIVE_DIR / 'result_files/test_results/Bset_LR_segb5_new/best_model.pth'
+    TEACHER_CKPT = BASE_DRIVE_DIR / 'result_files/test_results/Bset_LR_seg5_new/best_model.pth'
 
 else:
     # --- 로컬 환경일 때의 경로 ---
@@ -182,7 +182,7 @@ class KD:
     available engines:
     segtoseg
     logit
-    cross_arch_seg_kd
+    cross_arch_seg_kd   # cross_arch_seg_kd는 discriminator의 추가적인 parameter때문에 main_CAKD, train_CAKD를 별도로 이용해야됨
     hmkd
     """
 
