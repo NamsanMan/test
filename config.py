@@ -125,7 +125,7 @@ class TRAIN:
     WARMUP_EPOCHS = 5
 
     # main문 실행시 checkpoint 로드할것인지 설정
-    USE_CHECKPOINT = True
+    USE_CHECKPOINT = False
 
     # 딕셔너리 형태로 통일
     OPTIMIZER = {
