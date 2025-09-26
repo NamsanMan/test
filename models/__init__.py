@@ -3,6 +3,7 @@ from .segformer_wrapper import SegFormerWrapper
 from .d3p import create_model as d3p
 from .model_ddrnet_23slim import DDRNet as DDRNet23Slim
 from .segformer_smp import create_segformer_smp as segformer_smp
+from .unet import create_unet_model as unet
 
 # 나중에 다른 모델을 추가하면 아래에 계속 추가합니다.
 # from .unet import UNet
@@ -37,6 +38,10 @@ def create_model(model_name: str):
     elif model_name == 'segformer_smp':
         model = segformer_smp(classes=num_classes)
         print(f"▶ Model 'segformer_smp' created.")
+
+    elif model_name == 'unet':
+        model = unet(classes=num_classes)
+        print(f"▶ Model 'Unet' created.")
 
     else:
         raise ValueError(f"Model '{model_name}' not recognized.")

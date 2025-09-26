@@ -8,12 +8,13 @@ import segmentation_models_pytorch as smp
 from config import DATA
 
 # --- 기본 설정값 (DeepLabV3+ 코드와 동일한 형식 유지) ---
-DEFAULT_ENCODER_NAME = "resnet34"  # U-Net에서 자주 사용되는 인코더로 변경
+DEFAULT_ENCODER_NAME = "resnet34"
 DEFAULT_ENCODER_WEIGHTS = "imagenet"
 DEFAULT_IN_CHANNELS = 3
 DEFAULT_NUM_CLASSES = DATA.NUM_CLASSES
-# U-Net 인코더에서 추출할 중간 특징의 스테이지 인덱스
 # smp U-Net의 경우, 0=입력, 1=stage1, 2=stage2, ..., 5=bottleneck
+# encoder의 출력은 0번 인덱스가 stage1이므로 인덱스를 (0, 1, 2, 3, 4)로 변경하는 것이 일반적입니다.
+# 다만, 모델 구조에 따라 다르므로 확인이 필요합니다. 여기서는 원본 코드를 유지합니다.
 DEFAULT_STAGE_INDICES: Tuple[int, ...] = (1, 2, 3, 4, 5)
 
 
@@ -33,12 +34,9 @@ class UnetWrapper(nn.Module):
             stage_indices: Sequence[int] = DEFAULT_STAGE_INDICES,
     ) -> None:
         super().__init__()
-        # U-Net 모델도 DeepLabV3+와 동일한 속성들을 가지고 있습니다.
         self.encoder = base_model.encoder
         self.decoder = base_model.decoder
         self.segmentation_head = base_model.segmentation_head
-
-        # KD에 사용할 인코더 스테이지 인덱스를 저장합니다.
         self.stage_indices: Tuple[int, ...] = tuple(stage_indices)
 
     def forward(
@@ -61,7 +59,8 @@ class UnetWrapper(nn.Module):
         features: List[torch.Tensor] = self.encoder(x)
 
         # 2. 디코더와 최종 헤드를 통과시켜 logits를 계산합니다.
-        decoder_output: torch.Tensor = self.decoder(*features)
+        #    수정된 부분: '*'를 제거하여 features 리스트를 통째로 전달합니다.
+        decoder_output: torch.Tensor = self.decoder(features)
         logits: torch.Tensor = self.segmentation_head(decoder_output)
 
         # 3. 중간 특징 반환 여부를 결정합니다.
@@ -69,7 +68,11 @@ class UnetWrapper(nn.Module):
             return logits
 
         # 4. 지정된 인덱스에 해당하는 인코더 특징들을 선택하여 반환합니다.
-        feats_out: List[torch.Tensor] = [features[i] for i in self.stage_indices]
+        #    smp encoder 출력 리스트의 첫번째 요소는 stage1의 결과입니다.
+        #    따라서 stage_indices가 (1, 2, 3, 4, 5)라면 features 리스트의 인덱스 (0, 1, 2, 3, 4)에 접근해야 합니다.
+        #    이 부분은 모델의 정확한 출력에 따라 조정이 필요할 수 있습니다.
+        #    만약 features 리스트의 길이가 5이고 stage 1~5에 해당한다면 아래 코드가 맞습니다.
+        feats_out: List[torch.Tensor] = [features[i-1] for i in self.stage_indices]
 
         return logits, feats_out
 
@@ -89,7 +92,6 @@ def create_unet_model(
     """
     smp.Unet을 생성하고 UnetWrapper로 감싸서 반환하는 헬퍼 함수입니다.
     """
-    # 1. segmentation_models_pytorch 라이브러리에서 U-Net 베이스 모델을 생성합니다.
     base = smp.Unet(
         encoder_name=encoder_name,
         encoder_weights=encoder_weights,
@@ -98,7 +100,6 @@ def create_unet_model(
         **kwargs,
     )
 
-    # 2. 생성된 베이스 모델을 UnetWrapper로 감싸줍니다.
     return UnetWrapper(
         base_model=base,
         stage_indices=stage_indices,

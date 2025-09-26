@@ -35,7 +35,7 @@ else:
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "Bset_LR_CAKD_new"
+    PROJECT_NAME = "Bset_LR_unet_new"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -102,7 +102,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'segformerb5'
+    NAME = 'unet'
 
     """
     available models:
@@ -114,6 +114,7 @@ class MODEL:
     d3p
     ddrnet23slim
     segformer_smp
+    unet
     """
 
 # ──────────────────────────────────────────────────────────────────
@@ -218,9 +219,9 @@ class KD:
         # cross_arch_seg_kd는 discriminator의 추가적인 parameter때문에 main_CAKD, train_CAKD를 별도로 이용해야됨
         "cross_arch_seg_kd": {
             "w_ce_student": 0.0,   # 논문 원문 충실 → 학생 CE 사용 안함
-            "w_pca": 0.1,          # PCA loss (식 6,7)
-            "w_gl": 0.1,           # GL loss (식 7)
-            "w_mvg": 0.5,          # MVG loss (식 9,10), lambda 값
+            "w_pca": 1.0,          # PCA loss (식 6,7)
+            "w_gl": 1.0,           # GL loss (식 7)
+            "w_mvg": 1.0e2,          # MVG loss (식 9,10), lambda 값
             "pca_qk_channels": 64,
             "pca_v_channels": 128,
             "gl_dropout_p": 0.1,
