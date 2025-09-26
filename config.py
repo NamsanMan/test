@@ -35,7 +35,7 @@ else:
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "Bset_LR_CAKD_new"
+    PROJECT_NAME = "Bset_HR_seg5_new"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -120,7 +120,7 @@ class MODEL:
 # 4. TRAIN: 훈련 과정 관련 설정
 # ──────────────────────────────────────────────────────────────────
 class TRAIN:
-    EPOCHS = 200
+    EPOCHS = 100
     USE_WARMUP = True
     WARMUP_EPOCHS = 5
 
