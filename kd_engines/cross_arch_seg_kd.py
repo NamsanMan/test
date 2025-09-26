@@ -160,7 +160,6 @@ def _mvg_trans_single(img: torch.Tensor) -> torch.Tensor:
     return x
 
 
-
 def mvg_augment(batch: torch.Tensor, target_size: Tuple[int, int] | None = None) -> torch.Tensor:
     """
     Multi-View Generator (MVG)
@@ -176,18 +175,12 @@ def mvg_augment(batch: torch.Tensor, target_size: Tuple[int, int] | None = None)
         target_size = (H, W)
 
     out = []
-    # 내부 변환은 float32로 처리(수치 안정), 마지막에 원래 dtype으로 복원
     in_dtype = batch.dtype
     for n in range(B):
         x = batch[n].to(torch.float32)
         x = _mvg_trans_single(x)  # 확률 0.5로 강한 변환
-
-        # 변환으로 크기가 달라질 수 있으므로 강제 resize
         if x.shape[1:] != target_size:
-            x = F.interpolate(
-                x.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
-            ).squeeze(0)
-
+            x = F.interpolate(x.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False).squeeze(0)
         out.append(x)
 
     return torch.stack(out, dim=0).to(in_dtype)
@@ -201,7 +194,8 @@ class CrossArchSegKD(BaseKDEngine):
     Cross-Architecture KD + Cross-view Robust Training.
     - Teacher: Transformer wrapper (e.g., SegFormerWrapper)
     - Student: CNN wrapper (e.g., DeepLabV3+ wrapper)
-    - Losses: CE_student, PCA, GL, MAD (D), MVG (G)
+    - Student total: (PCA + GL) + λ · MVG
+    - Discriminator: MAD (별도 업데이트)
     """
     def __init__(self, teacher, student,
                  w_ce_student: float, w_pca: float, w_gl: float,
@@ -210,13 +204,13 @@ class CrossArchSegKD(BaseKDEngine):
                  ignore_index: int,
                  freeze_teacher: bool = True,
                  # Cross-view robust training
-                 w_mad: float = 0.0,           # Discriminator loss weight
-                 w_mvg: float = 0.0,           # Generator(Student) loss weight
+                 w_mad: float = 0.0,           # (원문 total에는 미포함, D 업데이트용)
+                 w_mvg: float = 0.0,           # (원문 total에 포함되는 λ)
                  disc_hidden: Tuple[int, int] = (256, 64)):
         super().__init__(teacher, student)
 
         # weights & hparams
-        self.w_ce_student = float(w_ce_student)
+        self.w_ce_student = float(w_ce_student)  # 원문 total에서는 사용하지 않음(모니터링용만 가능)
         self.w_pca = float(w_pca)
         self.w_gl = float(w_gl)
         self.pca_qk_channels = int(pca_qk_channels)
@@ -226,12 +220,11 @@ class CrossArchSegKD(BaseKDEngine):
         self._freeze_teacher = bool(freeze_teacher)
 
         # cross-view weights
-        self.w_mad = float(w_mad)
-        self.w_mvg = float(w_mvg)
+        self.w_mad = float(w_mad)  # D 업데이트만
+        self.w_mvg = float(w_mvg)  # Student total에 포함(λ)
         self._disc_hidden = disc_hidden
 
         # losses
-        self.ce_loss = nn.CrossEntropyLoss(ignore_index=self.ignore_index)
         self.mse_loss = nn.MSELoss()
         self.bce = nn.BCELoss()
 
@@ -259,7 +252,7 @@ class CrossArchSegKD(BaseKDEngine):
     def _build_projectors_if_needed(self, s_feat: torch.Tensor, t_feat: torch.Tensor):
         if self._projectors_built:
             # Discriminator lazy build
-            if (self.w_mad > 0 or self.w_mvg > 0) and not self._disc_built:
+            if (self.w_mvg > 0 or self.w_mad > 0) and not self._disc_built:
                 self.disc = MVGDiscriminator(t_feat.shape[1], self._disc_hidden).to(s_feat.device)
                 self._disc_built = True
             return
@@ -278,7 +271,7 @@ class CrossArchSegKD(BaseKDEngine):
         print(f"   - PCA QK: {self.pca_qk_channels}, V: {self.pca_v_channels}")
         print(f"   - GL out channels: {t_channels}")
 
-        if self.w_mad > 0 or self.w_mvg > 0:
+        if (self.w_mvg > 0 or self.w_mad > 0):
             self.disc = MVGDiscriminator(t_channels, self._disc_hidden).to(device)
             self._disc_built = True
             print(f"   - Discriminator in_channels: {t_channels}")
@@ -366,33 +359,36 @@ class CrossArchSegKD(BaseKDEngine):
         # 학생에 변환 입력 통과
         _s_logits_tr, s_feat_tr = self._get_last_encoder_feat(self.student, imgs_tr, is_teacher=False)
 
-        # === [FIX] 학생 feature를 teacher feature space로 매핑 ===
+        # 학생 feature를 teacher feature space로 매핑 (채널/공간 정합)
         if hasattr(self, "gl_proj_s") and not isinstance(self.gl_proj_s, nn.Identity):
             s_feat_tr = self.gl_proj_s(s_feat_tr)
             if s_feat_tr.shape[-2:] != t_feat_last.shape[-2:]:
-                s_feat_tr = F.interpolate(
-                    s_feat_tr, size=t_feat_last.shape[-2:], mode="bilinear", align_corners=False
-                )
+                s_feat_tr = F.interpolate(s_feat_tr, size=t_feat_last.shape[-2:], mode="bilinear", align_corners=False)
 
         # Discriminator 학습 손실 (real: h_T, fake: h'_S)
         real = t_feat_last.detach()
         fake = s_feat_tr.detach()
         pred_real = self.disc(real)
         pred_fake = self.disc(fake)
-        l_mad = self.bce(pred_real, torch.ones_like(pred_real)) + \
-                self.bce(pred_fake, torch.zeros_like(pred_fake))
+        l_mad = self.bce(pred_real, torch.ones_like(pred_real)) + self.bce(pred_fake, torch.zeros_like(pred_fake))
 
         # Generator(학생) 손실
         self._set_requires_grad(self.disc, False)
         pred_fake_for_g = self.disc(s_feat_tr)  # 학생에만 gradient
         l_mvg = torch.mean(torch.log(1.0 - pred_fake_for_g + 1e-6)) * (-1.0)
-        # 비포화 형태(Non-saturating GAN)로 바꾸려면 아래 한 줄 사용 가능:
+        # 비포화 형태(Non-saturating GAN)를 원하면 아래 한 줄로 교체 가능:
         # l_mvg = self.bce(pred_fake_for_g, torch.ones_like(pred_fake_for_g))
         self._set_requires_grad(self.disc, True)
 
         return l_mad, l_mvg
 
     def compute_losses(self, imgs: torch.Tensor, masks: torch.Tensor, device) -> dict:
+        """
+        원문 구현:
+          - Student total = w_pca*L_pca + w_gl*L_gl + w_mvg*L_mvg
+          - Discriminator loss = L_mad (Student total에는 미포함)
+          - CE 미사용 (원문), 필요시 모니터링 용도로만 계산/반환 가능
+        """
         # logits & last encoder features
         s_logits, s_feat = self._get_last_encoder_feat(self.student, imgs, is_teacher=False)
         if self._freeze_teacher:
@@ -404,40 +400,45 @@ class CrossArchSegKD(BaseKDEngine):
         # lazy build
         self._build_projectors_if_needed(s_feat, t_feat)
 
-        # losses
-        loss_ce = self.ce_loss(s_logits, masks)
-
+        # projection losses
         loss_pca = self._pca_loss(s_feat.float(), t_feat.float()) if self.w_pca > 0 else s_logits.new_tensor(0.0)
-        loss_gl = self._gl_loss(s_feat.float(), t_feat.float()) if self.w_gl > 0 else s_logits.new_tensor(0.0)
+        loss_gl  = self._gl_loss (s_feat.float(), t_feat.float()) if self.w_gl  > 0 else s_logits.new_tensor(0.0)
 
-        if (self.w_mad > 0 or self.w_mvg > 0) and self._disc_built:
+        # MVG(학생) / MAD(판별기)
+        if self._disc_built and (self.w_mvg > 0):
             loss_mad, loss_mvg = self._cvrt_losses(imgs, s_feat.float(), t_feat.float())
         else:
             loss_mad = s_logits.new_tensor(0.0)
             loss_mvg = s_logits.new_tensor(0.0)
 
-        total = (self.w_ce_student * loss_ce +
-                 self.w_pca * loss_pca +
-                 self.w_gl * loss_gl +
-                 self.w_mad * loss_mad +
-                 self.w_mvg * loss_mvg)
+        # === 원문 total: (PCA + GL) + λ * MVG ===
+        student_total = (self.w_pca * loss_pca) + (self.w_gl * loss_gl) + (self.w_mvg * loss_mvg)
+
+        # (옵션) CE를 모니터링하고 싶으면 주석 해제
+        # ce_loss = nn.CrossEntropyLoss(ignore_index=self.ignore_index)(s_logits, masks)
 
         return {
-            "total": total,
-            "ce_student": loss_ce.detach(),
-            "kd_pca": loss_pca.detach(),
-            "kd_gl": loss_gl.detach(),
-            "mad": loss_mad.detach(),
+            "student_total": student_total,   # ← Student optimizer용
+            "disc": loss_mad,                 # ← Discriminator optimizer용
+            "proj_pca": loss_pca.detach(),
+            "proj_gl": loss_gl.detach(),
             "mvg": loss_mvg.detach(),
+            # "ce_student": ce_loss.detach(),
             "s_logits": s_logits
         }
 
-    def get_extra_parameters(self) -> List[nn.Parameter]:
-        params: List[nn.Parameter] = []
+    # ==== Optimizer helpers ====
+    def get_student_parameters(self) -> List[nn.Parameter]:
+        """Student 업데이트용 파라미터 집합 (student + projector들)"""
+        params: List[nn.Parameter] = list(self.student.parameters())
         if self._projectors_built:
             params += list(self.pca_proj_s.parameters())
             params += list(self.pca_proj_t.parameters())
             params += list(self.gl_proj_s.parameters())
-        if self._disc_built and (self.w_mad > 0 or self.w_mvg > 0):
-            params += list(self.disc.parameters())
         return params
+
+    def get_disc_parameters(self) -> List[nn.Parameter]:
+        """Discriminator 파라미터만"""
+        if self._disc_built and (self.disc is not None):
+            return list(self.disc.parameters())
+        return []

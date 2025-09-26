@@ -35,7 +35,7 @@ else:
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "Bset_HR_seg5_new"
+    PROJECT_NAME = "Bset_LR_CAKD_new"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -177,7 +177,7 @@ class TRAIN:
 class KD:
     ENABLE = True
 
-    ENGINE_NAME = "hmkd"
+    ENGINE_NAME = "cross_arch_seg_kd"
     """
     available engines:
     segtoseg
@@ -214,20 +214,18 @@ class KD:
             "ignore_index": DATA.IGNORE_INDEX,
             "freeze_teacher": FREEZE_TEACHER
         },
+
+        # cross_arch_seg_kd는 discriminator의 추가적인 parameter때문에 main_CAKD, train_CAKD를 별도로 이용해야됨
         "cross_arch_seg_kd": {
-            "w_ce_student": 1.0,
-            "w_pca": 0.1,
-            "w_gl": 0.1,
+            "w_ce_student": 0.0,   # 논문 원문 충실 → 학생 CE 사용 안함
+            "w_pca": 0.1,          # PCA loss (식 6,7)
+            "w_gl": 0.1,           # GL loss (식 7)
+            "w_mvg": 0.5,          # MVG loss (식 9,10), lambda 값
             "pca_qk_channels": 64,
             "pca_v_channels": 128,
             "gl_dropout_p": 0.1,
             "ignore_index": DATA.IGNORE_INDEX,
-            # === Cross-view robust training (MVG + MAD) ===
-            "w_mad": 0.5,  # Discriminator loss weight (식 (8))
-            "w_mvg": 0.5,  # Student(generator) loss weight (식 (9))
-            "disc_hidden": (256, 64),  # D의 3층 MLP 숨은 차원
-
-            # 교사 고정 여부(엔진 쪽으로 전달)
+            "disc_hidden": (256, 64),
             "freeze_teacher": FREEZE_TEACHER
         },
         "hmkd": {
