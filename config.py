@@ -35,7 +35,7 @@ else:
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "Aset_LR_HMKD_new_stage"
+    PROJECT_NAME = "Aset_LR_HMKD_new_real"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -102,7 +102,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'segformerb5'
+    NAME = 'unet'
 
     """
     available models:
@@ -241,13 +241,13 @@ class KD:
             "gla_embed_dim": 64,  # 패치 임베딩 차원
             "gla_patch_size": 8,  # patch size (stride 기본값도 8)
             "gla_teacher_stage": 0,  # Hugginh Face 기준으로 SegFormer 인코더 stage 1 (0~3)
-            "gla_student_stage": 1,  # 학생 인코더 대응 스테이지, smp deeplab이나 unet 기준으로 0은 입력이고, 1이 실질적인 첫번째 stage
+            "gla_student_stage": 0,  # 학생 인코더 대응 스테이지, smp deeplab이나 unet 기준으로 0은 입력이고, 1이 실질적인 첫번째 stage인데, 내 d3p.py 래퍼에서 0을 실직적인 1번 스테이지라고 재 정의함
 
             # HSAM(HFA)
             "hfa_aligned_channels": 160,  # proj 채널
             "hfa_offset_scale": 2.0,  # 오프셋 최대 픽셀 (±2)
             "hfa_align_corners": True,  # interpolate/grid_sample 일관 옵션
-            "hfa_teacher_stage": -1,  # "-1"로 설정시 segformer MiT encoder의 stage 4
+            "hfa_teacher_stage": -2,  # "-1"로 설정시 segformer MiT encoder의 stage 4
             "hfa_student_stage": -2,  # "-1"로 설정시 mobilenetV2의 stage 5
 
             "freeze_teacher": FREEZE_TEACHER

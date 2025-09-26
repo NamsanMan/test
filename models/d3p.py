@@ -12,7 +12,7 @@ DEFAULT_ENCODER_NAME     = "mobilenet_v2"
 DEFAULT_ENCODER_WEIGHTS  = "imagenet"
 DEFAULT_IN_CHANNELS      = 3
 DEFAULT_NUM_CLASSES      = DATA.NUM_CLASSES
-DEFAULT_STAGE_INDICES: Tuple[int, ...] = (1, 2, 3, 4)
+DEFAULT_STAGE_INDICES: Tuple[int, ...] = (1, 2, 3, 4, 5)  # smp에서 0은 input이므로, 5개의 stage가 있는 mobilenetV2를 사용한다면 1~5까지 있어야됨
 
 # === 새로 추가: 내부 패딩 설정 ===
 AUTO_PAD_STRIDE = 16          # DeepLab(MNv2)에서 안전한 내부 stride >> smp가서 확인해보면 기본 OS(output sride)가 16으로 되어있음 >> 기본값 이용
