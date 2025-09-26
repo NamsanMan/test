@@ -13,7 +13,7 @@ if IS_COLAB:
     # Colab의 구글 드라이브 경로를 기본 경로로 설정
     BASE_DRIVE_DIR = Path('/content/drive/MyDrive/LAB')
 
-    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/B_set"
+    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_v4/B_set"
     BASE_DIR = BASE_DRIVE_DIR / "result_files/test_results"
 
     # KD용 weight load
@@ -35,7 +35,7 @@ else:
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "Bset_LR_unet_new"
+    PROJECT_NAME = "Bset_HR_seg5_new"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -102,7 +102,7 @@ class DATA:
 # ──────────────────────────────────────────────────────────────────
 
 class MODEL:
-    NAME = 'unet'
+    NAME = 'segformerb5'
 
     """
     available models:
@@ -121,7 +121,7 @@ class MODEL:
 # 4. TRAIN: 훈련 과정 관련 설정
 # ──────────────────────────────────────────────────────────────────
 class TRAIN:
-    EPOCHS = 200
+    EPOCHS = 100
     USE_WARMUP = True
     WARMUP_EPOCHS = 5
 
