@@ -13,7 +13,7 @@ if IS_COLAB:
     # Colab의 구글 드라이브 경로를 기본 경로로 설정
     BASE_DRIVE_DIR = Path('/content/drive/MyDrive/LAB')
 
-    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_LR_x4_Bilinear/B_set"
+    DATA_DIR = BASE_DRIVE_DIR / "datasets/project_use/CamVid_12_2Fold_v4/B_set"
     BASE_DIR = BASE_DRIVE_DIR / "result_files/test_results"
 
     # KD용 weight load
@@ -28,14 +28,14 @@ else:
     BASE_DIR = Path(r"E:\LAB\result_files\test_results")
 
     # KD용 weight load
-    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_LR_segb5\best_model.pth'
+    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_LR_seg5_new\best_model.pth'
 
 # ──────────────────────────────────────────────────────────────────
 # 1. GENERAL: 프로젝트 전반 및 실험 관리 설정
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "Bset_LR_seg5_new"
+    PROJECT_NAME = "Bset_HR_seg5_new"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -120,12 +120,12 @@ class MODEL:
 # 4. TRAIN: 훈련 과정 관련 설정
 # ──────────────────────────────────────────────────────────────────
 class TRAIN:
-    EPOCHS = 100
+    EPOCHS = 200
     USE_WARMUP = True
     WARMUP_EPOCHS = 5
 
     # main문 실행시 checkpoint 로드할것인지 설정
-    USE_CHECKPOINT = False
+    USE_CHECKPOINT = True
 
     # 딕셔너리 형태로 통일
     OPTIMIZER = {

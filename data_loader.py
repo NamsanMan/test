@@ -97,7 +97,7 @@ class TrainAugmentation:
         if random.random() < self.rotation_prob:
             angle = random.uniform(-self.rotation_degree, self.rotation_degree)
             img  = F.rotate(img, angle, interpolation=InterpolationMode.BILINEAR,expand=False)
-            mask = F.rotate(mask, angle, interpolation=InterpolationMode.NEAREST, expand=False, fill=11)    #fill에는 빈공간을 void label로 매꾸게 설정(class 11 = void)
+            mask = F.rotate(mask, angle, interpolation=InterpolationMode.NEAREST, expand=False, fill=config.DATA.IGNORE_INDEX)    #fill에는 빈공간을 void label로 매꾸게 설정(class 11 = void)
 
         # 4) 컬러 지터
         b = random.uniform(*self.brightness)
@@ -112,7 +112,10 @@ class TrainAugmentation:
         # 5) 텐서 변환 & 정규화
         img  = F.to_tensor(img)
         img  = F.normalize(img, mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
-        mask = torch.from_numpy(np.array(mask)).long()
+        # ★ 라벨 정규화: [0..10, 11] 이외는 11(Void)로 치환
+        mask_np = np.array(mask, dtype=np.int64)
+        mask_np[(mask_np < 0) | (mask_np > config.DATA.IGNORE_INDEX)] = config.DATA.IGNORE_INDEX
+        mask = torch.from_numpy(mask_np).long()
 
         return img, mask
 
@@ -127,7 +130,10 @@ class SegmentationTransform:
         mask = F.resize(mask, self.size, interpolation=InterpolationMode.NEAREST)
         img = F.to_tensor(img)
         img = F.normalize(img, mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
-        mask = torch.from_numpy(np.array(mask)).long()
+        # ★ 라벨 정규화: [0..10, 11] 이외는 11(Void)로 치환
+        mask_np = np.array(mask, dtype=np.int64)
+        mask_np[(mask_np < 0) | (mask_np > config.DATA.IGNORE_INDEX)] = config.DATA.IGNORE_INDEX
+        mask = torch.from_numpy(mask_np).long()
         return img, mask
 
 

@@ -50,7 +50,7 @@ def decode_segmap(label_mask):
 def main():
     if config.TRAIN.USE_CHECKPOINT:
         ##### train 안하고 checkpoint만 로드할 때 ######
-        checkpoint_name = r'E:\LAB\result_files\test_results\Aset_LR_KD_segb5_segb0\best_model.pth'
+        checkpoint_name = checkpoint_name = 'best_model.pth'
         best_ckpt = config.GENERAL.BASE_DIR / checkpoint_name
         if not best_ckpt.exists():
             raise FileNotFoundError(f"Checkpoint not found: {best_ckpt}")

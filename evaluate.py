@@ -13,33 +13,41 @@ def evaluate_all(model, loader, device):
 
     for imgs, masks in loader:
         imgs = imgs.to(device)
-        preds = torch.argmax(model(imgs), dim=1)
+        logits = model(imgs)
+        preds = torch.argmax(logits, dim=1)
 
         all_preds.append(preds.cpu().numpy())
         all_masks.append(masks.cpu().numpy())
 
-    # 전체 예측과 마스크를 하나의 큰 배열로 결합
-    preds_np = np.concatenate([p.flatten() for p in all_preds])
-    masks_np = np.concatenate([m.flatten() for m in all_masks])
+    # 1) 합치기
+    preds_np = np.concatenate([p.flatten() for p in all_preds]).astype(np.int64)
+    masks_np = np.concatenate([m.flatten() for m in all_masks]).astype(np.int64)
 
-    # 유효한 픽셀만 필터링
+    # 2) ★ 라벨 방어적 정규화 (테스트 라벨이 16-bit 등일 때를 대비)
+    #    [0..10] + 11(Void) 외 값은 Void로 보정
+    oob_true = (masks_np < 0) | (masks_np > DATA.IGNORE_INDEX)
+    if np.any(oob_true):
+        masks_np[oob_true] = DATA.IGNORE_INDEX
+
+    # 3) Void 제외
     valid = masks_np != DATA.IGNORE_INDEX
-    preds_np = preds_np[valid]
     masks_np = masks_np[valid]
+    preds_np = preds_np[valid]
 
-    # 이 결과로 모든 지표 계산
-    # 1. Pixel Accuracy
+    # 4) ★ 예측도 안전하게 [0..10]으로 클립 (이론상 필요 없지만 방어적으로)
+    if preds_np.size > 0:
+        np.clip(preds_np, 0, DATA.NUM_CLASSES - 1, out=preds_np)
+
+    # 5) Pixel Acc
     den = len(masks_np)
     pa = (np.sum(preds_np == masks_np) / den) if den > 0 else 0.0
 
-    # 2. Confusion Matrix
+    # 6) Confusion Matrix (이제 안전)
     cm = confusion_matrix(masks_np, preds_np, labels=list(range(DATA.NUM_CLASSES)))
 
-    # 3. mIoU 및 Per-class IoU
+    # 7) IoU
     intersection = np.diag(cm)
     union = np.sum(cm, axis=1) + np.sum(cm, axis=0) - np.diag(cm)
-
-    # ignore_index 제외
     iou = np.zeros(DATA.NUM_CLASSES, dtype=np.float64)
     np.divide(intersection, union, out=iou, where=(union > 0))
     valid_classes_iou = [iou[c] for c in range(DATA.NUM_CLASSES) if c != DATA.IGNORE_INDEX and union[c] > 0]
