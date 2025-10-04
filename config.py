@@ -28,14 +28,14 @@ else:
     BASE_DIR = Path(r"E:\LAB\result_files\test_results")
 
     # KD용 weight load
-    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_LR_seg5_new\best_model.pth'
+    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_HR_seg5_new\best_model.pth'
 
 # ──────────────────────────────────────────────────────────────────
 # 1. GENERAL: 프로젝트 전반 및 실험 관리 설정
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "Bset_HR_segb5_new"
+    PROJECT_NAME = "Bset_HR2LR_HMKD_new"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -121,7 +121,7 @@ class MODEL:
 # 4. TRAIN: 훈련 과정 관련 설정
 # ──────────────────────────────────────────────────────────────────
 class TRAIN:
-    EPOCHS = 100
+    EPOCHS = 200
     USE_WARMUP = True
     WARMUP_EPOCHS = 5
 
