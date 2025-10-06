@@ -24,18 +24,18 @@ else:
     print("▶ Running in local environment.")
 
     # 기존에 사용하시던 로컬 경로 설정
-    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\B_set")
+    DATA_DIR = Path(r"E:\LAB\datasets\project_use\CamVid_12_2Fold_LR_x4_Bilinear\A_set")
     BASE_DIR = Path(r"E:\LAB\result_files\test_results")
 
     # KD용 weight load
-    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_HR_seg5_new\best_model.pth'
+    TEACHER_CKPT = r'E:\LAB\result_files\test_results\Bset_LR_segb5\best_model.pth'
 
 # ──────────────────────────────────────────────────────────────────
 # 1. GENERAL: 프로젝트 전반 및 실험 관리 설정
 # ──────────────────────────────────────────────────────────────────
 class GENERAL:
     # 실험 프로젝트 이름
-    PROJECT_NAME = "Bset_HR2LR_HMKD_new"
+    PROJECT_NAME = "Bset_LR_HMKD_12"
 
     # 결과 파일을 저장할 기본 경로
     BASE_DIR = BASE_DIR / PROJECT_NAME
@@ -76,9 +76,9 @@ class DATA:
     CLASS_NAMES = [
         "Sky", "Building", "Pole", "Road", "Sidewalk",
         "Tree", "SignSymbol", "Fence", "Car",
-        "Pedestrian", "Bicyclist"
+        "Pedestrian", "Bicyclist", "Void"
     ]
-    NUM_CLASSES = len(CLASS_NAMES) # =11
+    NUM_CLASSES = len(CLASS_NAMES)  # =12 (Void 포함)
     IGNORE_INDEX = 11  # 'Void' 클래스의 인덱스
 
     # grayscale label(ground truth 포함)을 공식 컬러 매핑과 동일하게 시각화를 위해 컬러 매핑
@@ -232,7 +232,7 @@ class KD:
         "hmkd": {
             # 손실 가중치
             "w_ce_student": 1.0,
-            "w_gla": 1.0e4,  # PSAM(=GLA) 어텐션 MSE. 처음 0.05~0.2로 탐색 권장
+            "w_gla": 1.0,  # PSAM(=GLA) 어텐션 MSE. 처음 0.05~0.2로 탐색 권장
             "w_hfa": 1.0,  # HSAM(HFA) 재구성 MSE. 0.5~2.0 범위 탐색
 
             "ignore_index": DATA.IGNORE_INDEX,
